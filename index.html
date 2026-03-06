@@ -667,6 +667,13 @@
         let coordCache = {};
         let pendingSubmissions = JSON.parse(localStorage.getItem('pendingSubmissions') || '[]');
 
+        // Daftar desa default (fallback jika gagal load dari GitHub)
+        const defaultDesaList = [
+            "Ambengan", "Gitgit", "Kayu Putih", "Padang Bulia", "Pancasari",
+            "Panji Anom", "Panji", "Pegadungan", "Pegayaman", "Sambangan",
+            "Selat", "Silangjana", "Sukasada", "Tegallinggah", "Wanagiri"
+        ];
+
         // ==================== LOAD DAFTAR DESA DARI GITHUB ====================
         async function loadDesaList() {
             try {
@@ -679,10 +686,8 @@
                 }
 
                 if (isOnline) {
-                    // Coba ambil daftar file dari folder coordinates
-                    // Karena GitHub API tidak langsung mendukung list folder, kita gunakan pendekatan manual
-                    // Alternatif: buat file desa_list.json di repository
-                    const response = await fetch('https://api.github.com/repos/arta1979/dukops2/contents/data/coordinates');
+                    // Coba ambil daftar file dari folder coordinates via GitHub API
+                    const response = await fetch(`https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/contents/data/coordinates`);
                     if (response.ok) {
                         const files = await response.json();
                         desaList = files
@@ -693,19 +698,23 @@
                         localStorage.setItem('desaList', JSON.stringify(desaList));
                         populateDesaDropdown();
                         console.log('Loaded desa from GitHub:', desaList);
+                    } else {
+                        // Fallback ke default list
+                        desaList = defaultDesaList;
+                        populateDesaDropdown();
+                    }
+                } else {
+                    // Jika offline dan tidak ada cache, gunakan default
+                    if (desaList.length === 0) {
+                        desaList = defaultDesaList;
+                        populateDesaDropdown();
                     }
                 }
             } catch (error) {
                 console.error('Error loading desa list:', error);
-                // Fallback ke daftar desa default jika semua gagal
-                if (desaList.length === 0) {
-                    desaList = [
-                        "Ambengan", "Gitgit", "Kayu Putih", "Padang Bulia", "Pancasari",
-                        "Panji Anom", "Panji", "Pegadungan", "Pegayaman", "Sambangan",
-                        "Selat", "Silangjana", "Sukasada", "Tegallinggah", "Wanagiri"
-                    ];
-                    populateDesaDropdown();
-                }
+                // Fallback ke daftar desa default
+                desaList = defaultDesaList;
+                populateDesaDropdown();
             }
         }
 
@@ -741,7 +750,7 @@
 
             if (!isOnline) {
                 // Jika offline, return data default
-                return ["-8.1489, 115.1345"];
+                return { coordinates: [{ lat: -8.1489, lon: 115.1345 }] };
             }
 
             document.getElementById('coordLoading').classList.remove('hidden');
@@ -772,7 +781,7 @@
                 document.getElementById('coordLoading').classList.add('hidden');
                 
                 // Fallback ke data default
-                const defaultData = ["-8.1489, 115.1345"];
+                const defaultData = { coordinates: [{ lat: -8.1489, lon: 115.1345 }] };
                 coordCache[desa] = defaultData;
                 return defaultData;
             }
@@ -784,10 +793,19 @@
             
             const coordData = await loadCoordinatesForDesa(desa);
             
-            if (coordData && coordData.length > 0) {
+            // Format baru: { desa: "...", coordinates: [{ lat, lon, elevation }, ...] }
+            if (coordData && coordData.coordinates && coordData.coordinates.length > 0) {
+                const randomIndex = Math.floor(Math.random() * coordData.coordinates.length);
+                const point = coordData.coordinates[randomIndex];
+                return `${point.lat}, ${point.lon}`;
+            }
+            
+            // Fallback ke format lama jika ada (array langsung)
+            if (Array.isArray(coordData) && coordData.length > 0) {
                 const randomIndex = Math.floor(Math.random() * coordData.length);
                 return coordData[randomIndex];
             }
+            
             return "-8.1489, 115.1345";
         }
 
