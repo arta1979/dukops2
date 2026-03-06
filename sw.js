@@ -1,5 +1,5 @@
 // sw.js - Service Worker untuk PWA dengan auto update
-const CACHE_NAME = 'dukops-v1';
+const CACHE_NAME = 'dukops-v3';
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz-3Z-mRq7JLe-d4B85LY4A_rC4fDfeFmM6OelRl24FfEjeN-MW05Qk69fQyPF8w7bS/exec';
 
 // Files to cache
@@ -48,10 +48,31 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // Untuk file JSON koordinat, coba network dulu
+  if (event.request.url.includes('raw.githubusercontent.com')) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          // Cache successful responses
+          if (response && response.status === 200) {
+            const responseClone = response.clone();
+            caches.open(CACHE_NAME).then(cache => {
+              cache.put(event.request, responseClone);
+            });
+          }
+          return response;
+        })
+        .catch(() => {
+          // Fallback to cache
+          return caches.match(event.request);
+        })
+    );
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then(response => {
-        // Cache successful responses
         if (response && response.status === 200) {
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then(cache => {
@@ -61,7 +82,6 @@ self.addEventListener('fetch', event => {
         return response;
       })
       .catch(() => {
-        // Fallback to cache
         return caches.match(event.request);
       })
   );
@@ -78,17 +98,6 @@ self.addEventListener('sync', event => {
 self.addEventListener('message', event => {
   if (event.data.action === 'skipWaiting') {
     self.skipWaiting();
-  }
-  if (event.data.action === 'checkUpdate') {
-    // Notify all clients about update
-    self.clients.matchAll().then(clients => {
-      clients.forEach(client => {
-        client.postMessage({
-          action: 'updateAvailable',
-          version: event.data.version
-        });
-      });
-    });
   }
 });
 
