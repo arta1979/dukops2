@@ -20,6 +20,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="DUKOPS">
     <meta name="theme-color" content="#1a2a1a">
+    <link rel="manifest" href="manifest.json">
     
     <style>
         /* RESET TOTAL */
@@ -50,6 +51,26 @@
             align-items: center;
             justify-content: center;
             z-index: 9999;
+        }
+
+        .menu-icon.splash {
+            width: 100px;
+            height: 100px;
+            margin-bottom: 20px;
+        }
+
+        .splash-progress {
+            width: 200px;
+            height: 4px;
+            background: #2a3f2a;
+            margin-top: 20px;
+        }
+
+        .splash-progress-bar {
+            width: 0%;
+            height: 100%;
+            background: #9fd49f;
+            transition: width 0.3s;
         }
 
         /* INSTALL BUTTON */
@@ -448,12 +469,12 @@
 <body class="no-scroll">
     <!-- SPLASH SCREEN -->
     <div id="splashScreen">
-        <div class="menu-icon" style="width:90px; height:90px; margin-bottom:15px;">
-            <i class="fas fa-map-marked-alt" style="font-size:35px;"></i>
+        <div class="menu-icon splash">
+            <i class="fas fa-map-marked-alt" style="font-size:40px;"></i>
             <span>DUKOPS</span>
         </div>
-        <div style="width:180px; height:4px; background:#2a3f2a;">
-            <div id="splashProgress" style="width:0%; height:100%; background:#9fd49f; transition:width 0.3s;"></div>
+        <div class="splash-progress">
+            <div id="splashProgress" class="splash-progress-bar"></div>
         </div>
     </div>
 
@@ -465,7 +486,7 @@
     <!-- UPDATE NOTIFICATION -->
     <div id="updateNotification">
         <span>Update tersedia!</span>
-        <button onclick="updateApp()">Update</button>
+        <button onclick="window.location.reload()">Update</button>
     </div>
 
     <!-- OFFLINE MODE BANNER -->
@@ -644,7 +665,7 @@
 
     <script>
         // ==================== GOOGLE APPS SCRIPT CONFIG ====================
-        // !!! GANTI URL INI DENGAN URL APPS SCRIPT ANDA YANG ASLI !!!
+        // GANTI URL INI DENGAN URL APPS SCRIPT ANDA YANG ASLI
         const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz-3Z-mRq7JLe-d4B85LY4A_rC4fDfeFmM6OelRl24FfEjeN-MW05Qk69fQyPF8w7bS/exec";
         
         // ==================== GITHUB CONFIG ====================
@@ -666,7 +687,7 @@
         let appsScriptStatus = "unknown";
         let isOnline = navigator.onLine;
         
-        // Cache untuk data (hanya dari GitHub, tidak ada default di HTML)
+        // Cache untuk data
         let desaList = [];
         let coordCache = {};
         let pendingSubmissions = JSON.parse(localStorage.getItem('pendingSubmissions') || '[]');
@@ -692,7 +713,6 @@
                 }
 
                 if (isOnline) {
-                    // Coba ambil dari GitHub
                     const response = await fetch(DESA_LIST_URL + '?t=' + Date.now());
                     if (response.ok) {
                         const data = await response.json();
@@ -705,27 +725,14 @@
                         }
                         
                         if (desaList.length > 0) {
-                            // Simpan ke cache
                             localStorage.setItem('desaList', JSON.stringify(desaList));
                             populateDesaDropdown();
                             console.log('Loaded desa from GitHub:', desaList);
-                        } else {
-                            console.error('Desa list is empty from GitHub');
-                            document.getElementById('previewDesa').innerHTML = '<i class="fas fa-exclamation-circle"></i> Gagal memuat daftar desa';
                         }
-                    } else {
-                        console.error('Failed to load desa list from GitHub:', response.status);
                     }
-                }
-                
-                // Jika masih kosong, tampilkan pesan
-                if (desaList.length === 0) {
-                    console.error('No desa data available');
-                    document.getElementById('previewDesa').innerHTML = '<i class="fas fa-exclamation-circle"></i> Tidak ada data desa';
                 }
             } catch (error) {
                 console.error('Error loading desa list:', error);
-                document.getElementById('previewDesa').innerHTML = '<i class="fas fa-exclamation-circle"></i> Error memuat data';
             }
         }
 
@@ -734,92 +741,57 @@
             const selectDesa = document.getElementById('selectDesa');
             selectDesa.innerHTML = '<option value="">-- Pilih Desa --</option>';
             
-            if (desaList.length === 0) {
-                selectDesa.innerHTML = '<option value="">-- Tidak ada data desa --</option>';
-                return;
-            }
+            if (desaList.length === 0) return;
             
-            // Sort desaList alphabetically
             const sortedDesa = [...desaList].sort();
-            
             sortedDesa.forEach(desa => {
                 if (desa && desa.trim()) {
                     selectDesa.add(new Option(desa, desa));
                 }
             });
-            
-            console.log('Dropdown populated with', sortedDesa.length, 'desa');
         }
 
-        // ==================== LOAD KOORDINAT DARI GITHUB PER DESA ====================
+        // ==================== LOAD KOORDINAT DARI GITHUB ====================
         async function loadCoordinatesForDesa(desa) {
-            // Cek cache dulu
-            if (coordCache[desa]) {
-                console.log(`Using cached coordinates for ${desa}`);
-                return coordCache[desa];
-            }
+            if (coordCache[desa]) return coordCache[desa];
 
-            // Cek localStorage
             const cached = localStorage.getItem(`coord_${desa}`);
             if (cached) {
                 try {
                     const parsed = JSON.parse(cached);
                     coordCache[desa] = parsed;
-                    return coordCache[desa];
-                } catch (e) {
-                    // Abaikan jika cache corrupt
-                }
+                    return parsed;
+                } catch (e) {}
             }
 
-            if (!isOnline) {
-                // Jika offline, tidak ada data default
-                console.error(`Offline and no cached data for ${desa}`);
-                return null;
-            }
+            if (!isOnline) return null;
 
             document.getElementById('coordLoading').classList.remove('hidden');
-            document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memuat...';
             
             try {
                 const fileName = desa + ".json";
-                const fileUrl = COORD_BASE_URL + fileName;
-                console.log(`Loading coordinates from: ${fileUrl}`);
-                
-                const response = await fetch(fileUrl + '?t=' + Date.now());
+                const fileUrl = COORD_BASE_URL + fileName + '?t=' + Date.now();
+                const response = await fetch(fileUrl);
                 
                 if (response.ok) {
                     const data = await response.json();
-                    console.log(`Loaded coordinates for ${desa}:`, data);
-                    
-                    // Validasi format
-                    if (data && data.coordinates && Array.isArray(data.coordinates) && data.coordinates.length > 0) {
-                        // Simpan ke cache
+                    if (data && data.coordinates && data.coordinates.length > 0) {
                         coordCache[desa] = data;
                         localStorage.setItem(`coord_${desa}`, JSON.stringify(data));
-                        
-                        document.getElementById('coordLoading').classList.add('hidden');
                         return data;
-                    } else {
-                        console.error(`Invalid coordinate format for ${desa}:`, data);
-                        document.getElementById('coordLoading').classList.add('hidden');
-                        return null;
                     }
-                } else {
-                    throw new Error(`HTTP ${response.status}`);
                 }
             } catch (error) {
                 console.error('Error loading coordinates:', error);
+            } finally {
                 document.getElementById('coordLoading').classList.add('hidden');
-                return null;
             }
+            return null;
         }
 
         // ==================== FUNGSI KOORDINAT OTOMATIS ====================
         async function getRandomCoordForDesa(desa) {
-            if (!desa) {
-                console.error('No desa selected');
-                return null;
-            }
+            if (!desa) return null;
             
             const coordData = await loadCoordinatesForDesa(desa);
             
@@ -828,8 +800,6 @@
                 const point = coordData.coordinates[randomIndex];
                 return `${point.lat}, ${point.lon}`;
             }
-            
-            console.error(`No coordinates available for ${desa}`);
             return null;
         }
 
@@ -845,13 +815,10 @@
                 if (selectedCoord) {
                     document.getElementById('stampCoord').textContent = selectedCoord;
                     document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> ' + selectedCoord;
-                } else {
-                    document.getElementById('stampCoord').textContent = 'Error';
-                    document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-exclamation-circle"></i> Gagal memuat koordinat';
                 }
             } else {
                 document.getElementById('stampCoord').textContent = '-';
-                document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> Pilih desa untuk koordinat';
+                document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> Pilih desa';
             }
             
             if (selectedDate) {
@@ -864,248 +831,6 @@
             
             updateMainCanvas();
         }
-
-        // ==================== UPDATE NETWORK STATUS ====================
-        function updateNetworkStatus() {
-            isOnline = navigator.onLine;
-            if (isOnline) {
-                document.getElementById('networkStatusText').innerHTML = '<span class="status-online">Online</span>';
-                document.getElementById('offlineBanner').classList.add('hidden');
-            } else {
-                document.getElementById('networkStatusText').innerHTML = '<span class="status-offline">Offline</span>';
-                document.getElementById('offlineBanner').classList.remove('hidden');
-            }
-        }
-
-        window.addEventListener('online', updateNetworkStatus);
-        window.addEventListener('offline', updateNetworkStatus);
-
-        // ==================== CEK KONEKSI APPS SCRIPT ====================
-        async function checkAppsScriptConnection() {
-            if (!isOnline) {
-                appsScriptStatus = 'offline';
-                document.getElementById('apiStatusText').innerHTML = '<span class="status-offline">Offline ✗</span>';
-                return false;
-            }
-
-            try {
-                document.getElementById('apiStatusText').innerHTML = 'Mengecek...';
-                
-                // Coba panggil action test dari Apps Script
-                const response = await fetch(APPS_SCRIPT_URL + '?action=test&t=' + Date.now());
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success) {
-                        appsScriptStatus = 'online';
-                        document.getElementById('apiStatusText').innerHTML = '<span class="status-online">Online ✓</span>';
-                        console.log('Apps Script connected:', data);
-                        
-                        // Kirim pending submissions jika ada
-                        processPendingSubmissions();
-                        return true;
-                    } else {
-                        throw new Error('Response not successful');
-                    }
-                } else {
-                    throw new Error('HTTP error: ' + response.status);
-                }
-            } catch (error) {
-                console.error('Apps Script connection failed:', error);
-                appsScriptStatus = 'offline';
-                document.getElementById('apiStatusText').innerHTML = '<span class="status-offline">Offline ✗</span>';
-                return false;
-            }
-        }
-
-        // ==================== PROCESS PENDING SUBMISSIONS ====================
-        async function processPendingSubmissions() {
-            if (pendingSubmissions.length === 0) return;
-            
-            console.log(`Processing ${pendingSubmissions.length} pending submissions...`);
-            
-            for (let submission of pendingSubmissions) {
-                try {
-                    const result = await uploadToTelegramAndDrive(
-                        submission.fileData, 
-                        submission.fileName, 
-                        submission.desaName
-                    );
-                    
-                    if (result.success) {
-                        pendingSubmissions = pendingSubmissions.filter(s => s.id !== submission.id);
-                        localStorage.setItem('pendingSubmissions', JSON.stringify(pendingSubmissions));
-                        showToast(`Pending submission ${submission.fileName} terkirim!`);
-                    }
-                } catch (error) {
-                    console.error('Failed to send pending submission:', error);
-                }
-            }
-        }
-
-        // ==================== CALL APPS SCRIPT FUNCTION ====================
-        async function callAppsScript(action, data = {}) {
-            if (!isOnline) {
-                return { success: false, error: 'offline', offline: true };
-            }
-
-            try {
-                const formData = new URLSearchParams();
-                formData.append('action', action);
-                
-                for (let key in data) {
-                    if (data.hasOwnProperty(key)) {
-                        formData.append(key, data[key]);
-                    }
-                }
-
-                const response = await fetch(APPS_SCRIPT_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: formData.toString()
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    console.log('Apps Script response:', result);
-                    return result;
-                } else {
-                    console.error('HTTP error:', response.status);
-                    return { success: false, error: 'HTTP error: ' + response.status };
-                }
-            } catch (error) {
-                console.error('Apps Script call error:', error);
-                return { success: false, error: error.message, offline: !isOnline };
-            }
-        }
-
-        // ==================== UPLOAD TO TELEGRAM & DRIVE ====================
-        async function uploadToTelegramAndDrive(fileData, fileName, desaName) {
-            showToast('Mengirim ke server...');
-            
-            // Kirim ke Telegram via Apps Script
-            const telegramResult = await callAppsScript('sendTelegram', {
-                fileName: fileName,
-                fileData: fileData,
-                desaName: desaName,
-                mimeType: 'application/zip'
-            });
-            
-            if (telegramResult.success) {
-                console.log('Telegram success:', telegramResult);
-                
-                // Upload ke Drive via Apps Script
-                const now = new Date();
-                const year = now.getFullYear().toString();
-                const month = now.toLocaleDateString('id-ID', { month: 'long' });
-                
-                const driveResult = await callAppsScript('uploadDrive', {
-                    fileName: fileName,
-                    fileData: fileData,
-                    desa: desaName,
-                    year: year,
-                    month: month,
-                    mimeType: 'application/zip'
-                });
-                
-                if (driveResult.success) {
-                    console.log('Drive success:', driveResult);
-                    return { success: true, telegram: telegramResult, drive: driveResult };
-                } else {
-                    console.warn('Drive upload failed but Telegram OK');
-                    return { success: true, telegram: telegramResult, drive: driveResult };
-                }
-            } else {
-                console.error('Telegram upload failed:', telegramResult);
-                return telegramResult;
-            }
-        }
-
-        // ==================== PWA INSTALL PROMPT ====================
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            document.getElementById('installButton').style.display = 'flex';
-            
-            document.getElementById('installButton').addEventListener('click', () => {
-                document.getElementById('installButton').style.display = 'none';
-                deferredPrompt.prompt();
-                deferredPrompt.userChoice.then((choiceResult) => {
-                    if (choiceResult.outcome === 'accepted') {
-                        console.log('User accepted install');
-                    }
-                    deferredPrompt = null;
-                });
-            });
-        });
-
-        // ==================== SERVICE WORKER ====================
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js').then(registration => {
-                    console.log('ServiceWorker registered');
-                    
-                    registration.addEventListener('updatefound', () => {
-                        const newWorker = registration.installing;
-                        newWorker.addEventListener('statechange', () => {
-                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                document.getElementById('updateNotification').style.display = 'flex';
-                            }
-                        });
-                    });
-                }).catch(err => {
-                    console.log('ServiceWorker registration failed:', err);
-                });
-            });
-
-            navigator.serviceWorker.addEventListener('controllerchange', () => {
-                window.location.reload();
-            });
-        }
-
-        window.updateApp = function() {
-            document.getElementById('updateNotification').style.display = 'none';
-            if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage({ action: 'skipWaiting' });
-            }
-        };
-
-        // ==================== INITIALIZATION ====================
-        document.addEventListener('DOMContentLoaded', async function() {
-            // Update network status
-            updateNetworkStatus();
-            
-            // Load desa list dari GitHub (tidak ada default)
-            await loadDesaList();
-            
-            // Cek koneksi Apps Script
-            await checkAppsScriptConnection();
-
-            // Set default date
-            const now = new Date();
-            selectedDate = now;
-            document.getElementById('tanggalWaktu').value = now.toISOString().slice(0, 16);
-            
-            // Update stamp dan canvas
-            updateStampInfo();
-            drawDefaultCanvas();
-
-            // Splash screen
-            let progress = 0;
-            const interval = setInterval(() => {
-                progress += 10;
-                document.getElementById('splashProgress').style.width = progress + '%';
-                if (progress >= 100) {
-                    clearInterval(interval);
-                    setTimeout(() => {
-                        document.getElementById('splashScreen').style.display = 'none';
-                        document.getElementById('mainMenu').classList.remove('hidden');
-                    }, 500);
-                }
-            }, 200);
-        });
 
         // ==================== CANVAS FUNCTIONS ====================
         function drawDefaultCanvas() {
@@ -1229,11 +954,9 @@
                 
                 if (selectedCoord) {
                     document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> ' + selectedCoord;
-                } else {
-                    document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-exclamation-circle"></i> Gagal memuat koordinat';
                 }
             } else {
-                document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> Pilih desa untuk koordinat';
+                document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> Pilih desa';
             }
             
             updateStampInfo();
@@ -1248,9 +971,7 @@
                 reader.onload = function(e) {
                     img = new Image();
                     img.src = e.target.result;
-                    img.onload = function() {
-                        updateMainCanvas();
-                    };
+                    img.onload = updateMainCanvas;
                 };
                 reader.readAsDataURL(file);
             }
@@ -1269,8 +990,7 @@
                     year: 'numeric',
                     hour: '2-digit',
                     minute: '2-digit',
-                    second: '2-digit',
-                    hour12: false
+                    second: '2-digit'
                 };
                 
                 document.getElementById('previewTanggal').innerHTML = '<i class="fas fa-calendar-check"></i> ' + 
@@ -1280,34 +1000,111 @@
             }
         }
 
-        // ==================== RESET ====================
-        function resetAllData() {
-            if (confirm('Reset semua data?')) {
-                img = new Image();
-                selectedDesa = "";
-                selectedCoord = "";
-                narasiText = "";
-                selectedDate = new Date();
-                
-                document.getElementById('gambar').value = '';
-                document.getElementById('narasi').value = '';
-                document.getElementById('selectDesa').value = '';
-                document.getElementById('previewGambar').innerHTML = '';
-                document.getElementById('previewDesa').innerHTML = '';
-                document.getElementById('previewTanggal').innerHTML = '';
-                document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> Pilih desa untuk koordinat';
-                
-                document.getElementById('runningText').innerHTML = '<i class="fas fa-chevron-right"></i> Belum ada narasi <i class="fas fa-chevron-left"></i>';
-                
-                const now = new Date();
-                selectedDate = now;
-                document.getElementById('tanggalWaktu').value = now.toISOString().slice(0, 16);
-                
-                updateStampInfo();
-                drawDefaultCanvas();
-                
-                showToast('Semua data direset');
+        // ==================== UPDATE NETWORK STATUS ====================
+        function updateNetworkStatus() {
+            isOnline = navigator.onLine;
+            const statusEl = document.getElementById('networkStatusText');
+            const bannerEl = document.getElementById('offlineBanner');
+            
+            if (isOnline) {
+                statusEl.innerHTML = '<span class="status-online">Online</span>';
+                bannerEl.classList.add('hidden');
+            } else {
+                statusEl.innerHTML = '<span class="status-offline">Offline</span>';
+                bannerEl.classList.remove('hidden');
             }
+        }
+
+        window.addEventListener('online', updateNetworkStatus);
+        window.addEventListener('offline', updateNetworkStatus);
+
+        // ==================== CEK KONEKSI APPS SCRIPT ====================
+        async function checkAppsScriptConnection() {
+            const statusEl = document.getElementById('apiStatusText');
+            
+            if (!isOnline) {
+                statusEl.innerHTML = '<span class="status-offline">Offline ✗</span>';
+                return false;
+            }
+
+            try {
+                statusEl.innerHTML = 'Mengecek...';
+                const response = await fetch(APPS_SCRIPT_URL + '?action=test&t=' + Date.now());
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        statusEl.innerHTML = '<span class="status-online">Online ✓</span>';
+                        return true;
+                    }
+                }
+                throw new Error('Connection failed');
+            } catch (error) {
+                console.error('Apps Script connection failed:', error);
+                statusEl.innerHTML = '<span class="status-offline">Offline ✗</span>';
+                return false;
+            }
+        }
+
+        // ==================== CALL APPS SCRIPT ====================
+        async function callAppsScript(action, data = {}) {
+            if (!isOnline) {
+                return { success: false, error: 'offline', offline: true };
+            }
+
+            try {
+                const formData = new URLSearchParams();
+                formData.append('action', action);
+                
+                for (let key in data) {
+                    formData.append(key, data[key]);
+                }
+
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: formData.toString()
+                });
+
+                if (response.ok) {
+                    return await response.json();
+                }
+                return { success: false, error: 'HTTP error: ' + response.status };
+            } catch (error) {
+                return { success: false, error: error.message, offline: !isOnline };
+            }
+        }
+
+        // ==================== UPLOAD TO TELEGRAM & DRIVE ====================
+        async function uploadToTelegramAndDrive(fileData, fileName, desaName) {
+            showToast('Mengirim ke server...');
+            
+            const telegramResult = await callAppsScript('sendTelegram', {
+                fileName: fileName,
+                fileData: fileData,
+                desaName: desaName,
+                mimeType: 'application/zip'
+            });
+            
+            if (telegramResult.success) {
+                const now = new Date();
+                const year = now.getFullYear().toString();
+                const month = now.toLocaleDateString('id-ID', { month: 'long' });
+                
+                await callAppsScript('uploadDrive', {
+                    fileName: fileName,
+                    fileData: fileData,
+                    desa: desaName,
+                    year: year,
+                    month: month,
+                    mimeType: 'application/zip'
+                });
+                
+                return { success: true };
+            }
+            return telegramResult;
         }
 
         // ==================== SUBMIT ====================
@@ -1319,11 +1116,6 @@
             
             if (!img.src || !img.complete) {
                 showToast('Upload foto dulu');
-                return;
-            }
-
-            if (!selectedCoord) {
-                showToast('Koordinat tidak tersedia');
                 return;
             }
 
@@ -1346,17 +1138,12 @@
                 reader.onload = async function() {
                     const base64Data = reader.result.split(',')[1];
                     
-                    showToast('Mengirim ke server...');
-                    
                     const result = await uploadToTelegramAndDrive(base64Data, namaFile + '.zip', selectedDesa);
                     
                     if (result && result.success) {
                         document.getElementById('kirimStatus').innerHTML = '<i class="fas fa-check-circle"></i> Terkirim!';
                         showToast('Terkirim ke Telegram & Drive!');
-                        
-                        setTimeout(() => {
-                            goToMainMenu();
-                        }, 1500);
+                        setTimeout(goToMainMenu, 1500);
                     } else if (result && result.offline) {
                         const pendingId = Date.now();
                         pendingSubmissions.push({
@@ -1369,16 +1156,43 @@
                         
                         document.getElementById('kirimStatus').innerHTML = '<i class="fas fa-clock"></i> Disimpan (offline)';
                         showToast('Data disimpan, akan dikirim saat online');
-                        
-                        setTimeout(() => {
-                            goToMainMenu();
-                        }, 1500);
+                        setTimeout(goToMainMenu, 1500);
                     } else {
                         document.getElementById('kirimStatus').innerHTML = '<i class="fas fa-times-circle"></i> Gagal!';
-                        showToast('Gagal kirim: ' + (result ? result.error : 'Unknown error'));
+                        showToast('Gagal kirim');
                     }
                 };
             });
+        }
+
+        // ==================== RESET ====================
+        function resetAllData() {
+            if (confirm('Reset semua data?')) {
+                img = new Image();
+                selectedDesa = "";
+                selectedCoord = "";
+                narasiText = "";
+                selectedDate = new Date();
+                
+                document.getElementById('gambar').value = '';
+                document.getElementById('narasi').value = '';
+                document.getElementById('selectDesa').value = '';
+                document.getElementById('previewGambar').innerHTML = '';
+                document.getElementById('previewDesa').innerHTML = '';
+                document.getElementById('previewTanggal').innerHTML = '';
+                document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> Pilih desa';
+                
+                document.getElementById('runningText').innerHTML = '<i class="fas fa-chevron-right"></i> Belum ada narasi <i class="fas fa-chevron-left"></i>';
+                
+                const now = new Date();
+                selectedDate = now;
+                document.getElementById('tanggalWaktu').value = now.toISOString().slice(0, 16);
+                
+                updateStampInfo();
+                drawDefaultCanvas();
+                
+                showToast('Semua data direset');
+            }
         }
 
         // ==================== TOAST ====================
@@ -1388,6 +1202,56 @@
             toast.style.display = 'block';
             setTimeout(() => toast.style.display = 'none', 2000);
         }
+
+        // ==================== SERVICE WORKER ====================
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').then(registration => {
+                    console.log('ServiceWorker registered');
+                }).catch(err => {
+                    console.log('ServiceWorker registration failed:', err);
+                });
+            });
+        }
+
+        // ==================== PWA INSTALL ====================
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            document.getElementById('installButton').style.display = 'flex';
+            
+            document.getElementById('installButton').addEventListener('click', () => {
+                document.getElementById('installButton').style.display = 'none';
+                deferredPrompt.prompt();
+            });
+        });
+
+        // ==================== INITIALIZATION ====================
+        document.addEventListener('DOMContentLoaded', async function() {
+            updateNetworkStatus();
+            await loadDesaList();
+            await checkAppsScriptConnection();
+
+            const now = new Date();
+            selectedDate = now;
+            document.getElementById('tanggalWaktu').value = now.toISOString().slice(0, 16);
+            
+            updateStampInfo();
+            drawDefaultCanvas();
+
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += 10;
+                document.getElementById('splashProgress').style.width = progress + '%';
+                if (progress >= 100) {
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        document.getElementById('splashScreen').style.display = 'none';
+                        document.getElementById('mainMenu').classList.remove('hidden');
+                    }, 500);
+                }
+            }, 200);
+        });
 
         // ==================== WINDOW EXPORTS ====================
         window.openForm = openForm;
