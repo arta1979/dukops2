@@ -643,8 +643,11 @@
     <div id="toastMessage" class="toast"></div>
 
     <script>
-        // ==================== KONFIGURASI ====================
+        // ==================== GOOGLE APPS SCRIPT CONFIG ====================
+        // !!! GANTI URL INI DENGAN URL APPS SCRIPT ANDA YANG ASLI !!!
         const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz-3Z-mRq7JLe-d4B85LY4A_rC4fDfeFmM6OelRl24FfEjeN-MW05Qk69fQyPF8w7bS/exec";
+        
+        // ==================== GITHUB CONFIG ====================
         const GITHUB_USERNAME = "arta1979";
         const GITHUB_REPO = "dukops2";
         const GITHUB_BRANCH = "main";
@@ -708,7 +711,6 @@
                             console.log('Loaded desa from GitHub:', desaList);
                         } else {
                             console.error('Desa list is empty from GitHub');
-                            // Tampilkan pesan error
                             document.getElementById('previewDesa').innerHTML = '<i class="fas fa-exclamation-circle"></i> Gagal memuat daftar desa';
                         }
                     } else {
@@ -889,6 +891,7 @@
             try {
                 document.getElementById('apiStatusText').innerHTML = 'Mengecek...';
                 
+                // Coba panggil action test dari Apps Script
                 const response = await fetch(APPS_SCRIPT_URL + '?action=test&t=' + Date.now());
                 
                 if (response.ok) {
@@ -982,6 +985,7 @@
         async function uploadToTelegramAndDrive(fileData, fileName, desaName) {
             showToast('Mengirim ke server...');
             
+            // Kirim ke Telegram via Apps Script
             const telegramResult = await callAppsScript('sendTelegram', {
                 fileName: fileName,
                 fileData: fileData,
@@ -992,6 +996,7 @@
             if (telegramResult.success) {
                 console.log('Telegram success:', telegramResult);
                 
+                // Upload ke Drive via Apps Script
                 const now = new Date();
                 const year = now.getFullYear().toString();
                 const month = now.toLocaleDateString('id-ID', { month: 'long' });
