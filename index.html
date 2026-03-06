@@ -692,7 +692,7 @@
                 }
 
                 if (isOnline) {
-                    // Coba ambil dari GitHub
+                    // Ambil dari GitHub
                     const response = await fetch(DESA_LIST_URL + '?t=' + Date.now());
                     if (response.ok) {
                         const data = await response.json();
@@ -717,29 +717,6 @@
                     }
                 }
                 
-                // Jika masih kosong, gunakan default
-                if (desaList.length === 0) {
-                    desaList = [
-                        "Gitgit", "Panji", "Panji Anom", "Sukasada", "Pancasari",
-                        "Wanagiri", "Ambengan", "Kayu Putih", "Padang Bulia",
-                        "Pegadungan", "Pegayaman", "Sambangan", "Selat",
-                        "Silangjana", "Tegallinggah"
-                    ];
-                    populateDesaDropdown();
-                }
-            } catch (error) {
-                console.error('Error loading desa list:', error);
-                // Fallback ke daftar desa default
-                desaList = [
-                    "Gitgit", "Panji", "Panji Anom", "Sukasada", "Pancasari",
-                    "Wanagiri", "Ambengan", "Kayu Putih", "Padang Bulia",
-                    "Pegadungan", "Pegayaman", "Sambangan", "Selat",
-                    "Silangjana", "Tegallinggah"
-                ];
-                populateDesaDropdown();
-            }
-        }
-
         // ==================== POPULATE DROPDOWN DESA ====================
         function populateDesaDropdown() {
             const selectDesa = document.getElementById('selectDesa');
