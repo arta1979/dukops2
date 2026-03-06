@@ -700,7 +700,7 @@
             <div style="width:45px;"></div>
         </div>
         
-        <textarea id="narasiFull" class="fullscreen-textarea" placeholder="Tulis narasi kegiatan di sini..."><?php echo isset($_POST['message']) ? htmlspecialchars($_POST['message']) : ''; ?></textarea>
+        <textarea id="narasiFull" class="fullscreen-textarea" placeholder="Tulis narasi kegiatan di sini..."></textarea>
         <button class="save-btn" onclick="saveNarasi()">SIMPAN NARASI</button>
     </div>
 
@@ -1240,19 +1240,32 @@
             const imgData = canvas.toDataURL('image/png').split(',')[1];
             const date = selectedDate;
 
-            const namaFile = selectedDesa.replace(/[^a-z0-9]/gi, '_') + '_' + 
-                            ('0' + date.getDate()).slice(-2) + '_' + 
-                            ('0' + (date.getMonth()+1)).slice(-2) + '_' +
-                            date.getFullYear() + '_' +
-                            ('0' + date.getHours()).slice(-2) + 
-                            ('0' + date.getMinutes()).slice(-2) + 
-                            ('0' + date.getSeconds()).slice(-2);
+            // Format tanggal: DD_MM_YYYY
+            const day = ('0' + date.getDate()).slice(-2);
+            const month = ('0' + (date.getMonth() + 1)).slice(-2);
+            const year = date.getFullYear();
+            const hour = ('0' + date.getHours()).slice(-2);
+            const minute = ('0' + date.getMinutes()).slice(-2);
+            const second = ('0' + date.getSeconds()).slice(-2);
 
-            const zip = new JSZip();
-            zip.file('NARASI.txt', narasiText);
-            zip.file('FOTO.png', imgData, { base64: true });
+            const dateStr = `${day}_${month}_${year}`;
+            const timeStr = `${hour}_${minute}_${second}`;
+
+            // Nama file sesuai format yang diminta
+            const baseFileName = `${selectedDesa}_${dateStr}`;
+            const txtFileName = `${baseFileName}.txt`;
+            const pngFileName = `${baseFileName}.png`;
+            const zipFileName = `${baseFileName}.zip`;
 
             showLoading(true, 'Membuat file ZIP...');
+
+            const zip = new JSZip();
+            
+            // Tambahkan file TXT dengan nama sesuai format
+            zip.file(txtFileName, narasiText);
+            
+            // Tambahkan file PNG dengan nama sesuai format
+            zip.file(pngFileName, imgData, { base64: true });
 
             zip.generateAsync({ type: 'blob' }).then(async function(content) {
                 const reader = new FileReader();
@@ -1261,7 +1274,7 @@
                     const base64Data = reader.result.split(',')[1];
                     
                     // Upload langsung ke Drive
-                    const success = await uploadToDrive(base64Data, namaFile + '.zip', selectedDesa);
+                    const success = await uploadToDrive(base64Data, zipFileName, selectedDesa);
                     
                     if (success) {
                         // Reset form setelah sukses
