@@ -1,7 +1,4 @@
-// sw.js - Service Worker untuk DUKOPS PWA
-const CACHE_NAME = 'dukops-v1';
-
-// Files to cache
+const CACHE_NAME = 'dukops-v2';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -12,61 +9,40 @@ const urlsToCache = [
   'https://cdn.polyfill.io/v3/polyfill.min.js'
 ];
 
-// Install event
 self.addEventListener('install', event => {
-  console.log('Service Worker: Installing...');
   self.skipWaiting();
-  
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Service Worker: Caching files');
-        return cache.addAll(urlsToCache);
-      })
+    caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
   );
 });
 
-// Activate event
 self.addEventListener('activate', event => {
-  console.log('Service Worker: Activating...');
-  
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('Service Worker: Deleting old cache', cacheName);
-            return caches.delete(cacheName);
-          }
+          if (cacheName !== CACHE_NAME) return caches.delete(cacheName);
         })
       );
-    }).then(() => {
-      console.log('Service Worker: Activation complete');
-      return self.clients.claim();
-    })
+    }).then(() => self.clients.claim())
   );
 });
 
-// Fetch event
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   
-  // Skip untuk Apps Script
   if (url.href.includes('script.google.com')) {
     event.respondWith(fetch(event.request));
     return;
   }
 
-  // Untuk GitHub, network first
   if (url.href.includes('raw.githubusercontent.com')) {
     event.respondWith(
       fetch(event.request)
         .then(response => {
           if (response && response.status === 200) {
             const responseClone = response.clone();
-            caches.open(CACHE_NAME).then(cache => {
-              cache.put(event.request, responseClone);
-            });
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
           }
           return response;
         })
@@ -75,29 +51,16 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Untuk file statis, cache first
   event.respondWith(
-    caches.match(event.request)
-      .then(cachedResponse => {
-        if (cachedResponse) return cachedResponse;
-        
-        return fetch(event.request)
-          .then(response => {
-            if (response && response.status === 200) {
-              const responseClone = response.clone();
-              caches.open(CACHE_NAME).then(cache => {
-                cache.put(event.request, responseClone);
-              });
-            }
-            return response;
-          });
-      })
+    caches.match(event.request).then(cachedResponse => {
+      if (cachedResponse) return cachedResponse;
+      return fetch(event.request).then(response => {
+        if (response && response.status === 200) {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseClone));
+        }
+        return response;
+      });
+    })
   );
-});
-
-// Message event untuk update
-self.addEventListener('message', event => {
-  if (event.data && event.data.action === 'skipWaiting') {
-    self.skipWaiting();
-  }
 });
