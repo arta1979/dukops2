@@ -1,119 +1,1404 @@
-// sw.js - Service Worker untuk PWA dengan auto update
-const CACHE_NAME = 'dukops-v3';
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz-3Z-mRq7JLe-d4B85LY4A_rC4fDfeFmM6OelRl24FfEjeN-MW05Qk69fQyPF8w7bS/exec';
-
-// Files to cache
-const urlsToCache = [
-  '/',
-  '/index.html',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
-  'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
-  'https://cdn.polyfill.io/v3/polyfill.min.js'
-];
-
-// Install event
-self.addEventListener('install', event => {
-  self.skipWaiting();
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Cache opened');
-        return cache.addAll(urlsToCache);
-      })
-  );
-});
-
-// Activate event - clean up old caches
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    }).then(() => {
-      return self.clients.claim();
-    })
-  );
-});
-
-// Fetch event - network first, then cache
-self.addEventListener('fetch', event => {
-  // Skip for Apps Script calls (biar selalu fresh)
-  if (event.request.url.includes('script.google.com')) {
-    event.respondWith(fetch(event.request));
-    return;
-  }
-
-  // Untuk file JSON koordinat, coba network dulu
-  if (event.request.url.includes('raw.githubusercontent.com')) {
-    event.respondWith(
-      fetch(event.request)
-        .then(response => {
-          // Cache successful responses
-          if (response && response.status === 200) {
-            const responseClone = response.clone();
-            caches.open(CACHE_NAME).then(cache => {
-              cache.put(event.request, responseClone);
-            });
-          }
-          return response;
-        })
-        .catch(() => {
-          // Fallback to cache
-          return caches.match(event.request);
-        })
-    );
-    return;
-  }
-
-  event.respondWith(
-    fetch(event.request)
-      .then(response => {
-        if (response && response.status === 200) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(event.request, responseClone);
-          });
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DUKOPS - Koramil 1609-05/Sukasada</title>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- JSZip -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <!-- Polyfill untuk Android lama -->
+    <script src="https://cdn.polyfill.io/v3/polyfill.min.js?features=default,es6,Promise,fetch,Array.prototype.includes"></script>
+    
+    <!-- PWA Configuration -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="DUKOPS">
+    <meta name="theme-color" content="#1a2a1a">
+    
+    <style>
+        /* RESET TOTAL */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, Helvetica, sans-serif;
         }
-        return response;
-      })
-      .catch(() => {
-        return caches.match(event.request);
-      })
-  );
-});
 
-// Background sync for failed requests
-self.addEventListener('sync', event => {
-  if (event.tag === 'sync-reports') {
-    event.waitUntil(syncReports());
-  }
-});
+        body {
+            background: #1a2a1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            overflow: hidden;
+        }
 
-// Message event for updates
-self.addEventListener('message', event => {
-  if (event.data.action === 'skipWaiting') {
-    self.skipWaiting();
-  }
-});
+        /* SPLASH SCREEN */
+        #splashScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #1a2a1a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
 
-// Function to sync reports when back online
-async function syncReports() {
-  const cache = await caches.open('pending-reports');
-  const requests = await cache.keys();
-  
-  for (const request of requests) {
-    try {
-      const response = await fetch(request);
-      if (response.ok) {
-        await cache.delete(request);
-      }
-    } catch (error) {
-      console.log('Sync failed for:', request.url);
-    }
-  }
-}
+        /* INSTALL BUTTON */
+        #installButton {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #2a3f2a;
+            border: 2px solid #9fd49f;
+            color: #9fd49f;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 10000;
+            font-size: 24px;
+            display: none;
+        }
+
+        /* UPDATE NOTIFICATION */
+        #updateNotification {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #2a3f2a;
+            border: 2px solid #9fd49f;
+            color: #9fd49f;
+            padding: 15px 25px;
+            border-radius: 50px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            z-index: 10001;
+            display: none;
+        }
+
+        #updateNotification button {
+            background: #9fd49f;
+            border: none;
+            color: #1a2a1a;
+            padding: 8px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        /* MAIN MENU */
+        .main-menu {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background: #1a2a1a;
+            padding: 10px;
+        }
+
+        /* LAYAR UTAMA - CANVAS PREVIEW */
+        .screen-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            margin-bottom: 5px;
+        }
+
+        #mainCanvas {
+            width: 100%;
+            height: auto;
+            display: block;
+            background: #0a120a;
+            max-height: 55vh;
+            object-fit: contain;
+            border: none;
+        }
+
+        /* STAMP INFO - REAL TIME PREVIEW */
+        .stamp-info {
+            background: #0f1a0f;
+            padding: 8px 12px;
+            margin: 5px 0;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #9fd49f;
+            border-left: 3px solid #9fd49f;
+        }
+
+        .stamp-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .stamp-item i {
+            color: #9fd49f;
+            width: 18px;
+        }
+
+        .stamp-value {
+            color: white;
+            font-weight: bold;
+        }
+
+        /* RUNNING TEXT NARASI */
+        .running-text-container {
+            background: #0f1a0f;
+            padding: 6px 0;
+            margin: 5px 0;
+            overflow: hidden;
+            white-space: nowrap;
+            border-top: 1px solid #2a3f2a;
+            border-bottom: 1px solid #2a3f2a;
+        }
+
+        .running-text {
+            display: inline-block;
+            color: #9fd49f;
+            font-size: 13px;
+            animation: scrollText 20s linear infinite;
+            padding-left: 100%;
+        }
+
+        @keyframes scrollText {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-100%); }
+        }
+
+        .running-text i {
+            margin: 0 10px;
+            color: #9fd49f;
+        }
+
+        /* 5 ICON BERJAJAR */
+        .icon-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 5px 0;
+        }
+
+        .menu-icon {
+            flex: 1;
+            aspect-ratio: 1 / 1;
+            max-width: 70px;
+            border-radius: 50%;
+            background: #2a3f2a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: 2px solid #9fd49f;
+            margin: 0 auto;
+        }
+
+        .menu-icon i {
+            color: #9fd49f;
+            font-size: 24px;
+            margin-bottom: 2px;
+        }
+
+        .menu-icon span {
+            color: #b0b0b0;
+            font-size: 9px;
+            text-align: center;
+        }
+
+        /* RESET ICON */
+        .reset-icon {
+            width: 55px;
+            height: 55px;
+            border-radius: 50%;
+            background: #2a3f2a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: 2px solid #b85c5c;
+            margin: 5px auto 0;
+        }
+
+        .reset-icon i {
+            color: #b85c5c;
+            font-size: 22px;
+        }
+
+        /* FULL SCREEN FORM */
+        .fullscreen-form {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #1a2a1a;
+            z-index: 1000;
+            overflow-y: auto;
+            padding: 15px;
+            display: none;
+        }
+
+        .fullscreen-form.active {
+            display: block;
+        }
+
+        /* FORM HEADER */
+        .form-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-top: 5px;
+        }
+
+        .back-icon {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            background: #2a3f2a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: 2px solid #9fd49f;
+        }
+
+        .back-icon i {
+            color: #9fd49f;
+            font-size: 20px;
+        }
+
+        .form-title {
+            color: #9fd49f;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        /* FORM ELEMENTS */
+        select, input, textarea {
+            width: 100%;
+            background: #2a3f2a;
+            color: #e0e0e0;
+            padding: 12px;
+            margin: 8px 0;
+            border: 2px solid #9fd49f;
+            border-radius: 50px;
+            font-size: 14px;
+        }
+
+        select option {
+            background: #1a2a1a;
+        }
+
+        textarea {
+            border-radius: 20px;
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        /* PREVIEW TEXT */
+        .preview-text {
+            color: #b0b0b0;
+            font-size: 12px;
+            margin: 5px 0;
+            padding: 5px 10px;
+        }
+
+        .preview-text i {
+            color: #9fd49f;
+            margin-right: 5px;
+        }
+
+        /* ACTION BUTTONS */
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .action-btn {
+            flex: 1;
+            height: 45px;
+            border-radius: 25px;
+            background: #2a3f2a;
+            border: 2px solid #9fd49f;
+            color: #9fd49f;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            cursor: pointer;
+        }
+
+        .action-btn i {
+            font-size: 16px;
+        }
+
+        /* UPLOAD ICONS */
+        .upload-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: #2a3f2a;
+            border: 2px solid #9fd49f;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            position: relative;
+            margin: 20px auto;
+        }
+
+        .upload-icon i {
+            color: #9fd49f;
+            font-size: 32px;
+        }
+
+        .upload-icon input {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        /* TOAST */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #2a3f2a;
+            border: 2px solid #9fd49f;
+            color: #9fd49f;
+            padding: 12px 25px;
+            border-radius: 50px;
+            font-size: 14px;
+            display: none;
+            z-index: 2000;
+        }
+
+        /* HIDDEN */
+        .hidden {
+            display: none !important;
+        }
+
+        .no-scroll {
+            overflow: hidden;
+        }
+
+        /* STATUS BAR */
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 10px;
+            font-size: 10px;
+            color: #5a7a5a;
+            border-bottom: 1px solid #2a3f2a;
+        }
+
+        .status-online {
+            color: #9fd49f;
+        }
+
+        .status-offline {
+            color: #b85c5c;
+        }
+
+        /* LOADING COORD */
+        .coord-loading {
+            color: #9fd49f;
+            font-size: 11px;
+            margin: 5px 0;
+        }
+
+        /* OFFLINE MODE INDICATOR */
+        .offline-mode {
+            background: #b85c5c;
+            color: white;
+            text-align: center;
+            padding: 3px;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body class="no-scroll">
+    <!-- SPLASH SCREEN -->
+    <div id="splashScreen">
+        <div class="menu-icon" style="width:90px; height:90px; margin-bottom:15px;">
+            <i class="fas fa-map-marked-alt" style="font-size:35px;"></i>
+            <span>DUKOPS</span>
+        </div>
+        <div style="width:180px; height:4px; background:#2a3f2a;">
+            <div id="splashProgress" style="width:0%; height:100%; background:#9fd49f; transition:width 0.3s;"></div>
+        </div>
+    </div>
+
+    <!-- INSTALL BUTTON -->
+    <div id="installButton">
+        <i class="fas fa-download"></i>
+    </div>
+
+    <!-- UPDATE NOTIFICATION -->
+    <div id="updateNotification">
+        <span>Update tersedia!</span>
+        <button onclick="updateApp()">Update</button>
+    </div>
+
+    <!-- OFFLINE MODE BANNER -->
+    <div id="offlineBanner" class="offline-mode hidden">
+        <i class="fas fa-wifi-slash"></i> Mode Offline - Data menggunakan cache
+    </div>
+
+    <!-- MAIN MENU -->
+    <div id="mainMenu" class="main-menu hidden">
+        <!-- STATUS BAR -->
+        <div class="status-bar">
+            <span id="apiStatus"><i class="fas fa-circle"></i> Apps Script: <span id="apiStatusText">Mengecek...</span></span>
+            <span id="networkStatus"><i class="fas fa-circle"></i> Network: <span id="networkStatusText">Online</span></span>
+        </div>
+
+        <!-- LAYAR UTAMA - CANVAS PREVIEW -->
+        <div class="screen-container">
+            <canvas id="mainCanvas" width="600" height="300"></canvas>
+        </div>
+
+        <!-- STAMP INFO - REAL TIME PREVIEW -->
+        <div class="stamp-info" id="stampInfo">
+            <div class="stamp-item">
+                <i class="fas fa-village"></i>
+                <span>Desa: <span class="stamp-value" id="stampDesa">-</span></span>
+            </div>
+            <div class="stamp-item">
+                <i class="fas fa-map-marker-alt"></i>
+                <span>Koordinat: <span class="stamp-value" id="stampCoord">-</span></span>
+            </div>
+            <div class="stamp-item">
+                <i class="fas fa-calendar"></i>
+                <span>Tanggal: <span class="stamp-value" id="stampTanggal">-</span></span>
+            </div>
+            <div class="stamp-item">
+                <i class="fas fa-clock"></i>
+                <span>Jam: <span class="stamp-value" id="stampJam">-</span></span>
+            </div>
+        </div>
+
+        <!-- RUNNING TEXT NARASI -->
+        <div class="running-text-container">
+            <div class="running-text" id="runningText">
+                <i class="fas fa-chevron-right"></i> Belum ada narasi <i class="fas fa-chevron-left"></i>
+            </div>
+        </div>
+
+        <!-- 5 ICON BERJAJAR -->
+        <div class="icon-row">
+            <div class="menu-icon" onclick="openForm('desa')">
+                <i class="fas fa-village"></i>
+                <span>DESA</span>
+            </div>
+            <div class="menu-icon" onclick="openForm('foto')">
+                <i class="fas fa-camera"></i>
+                <span>FOTO</span>
+            </div>
+            <div class="menu-icon" onclick="openForm('tanggal')">
+                <i class="fas fa-calendar"></i>
+                <span>TGL</span>
+            </div>
+            <div class="menu-icon" onclick="openForm('narasi')">
+                <i class="fas fa-file-alt"></i>
+                <span>NARASI</span>
+            </div>
+            <div class="menu-icon" onclick="openForm('kirim')">
+                <i class="fas fa-paper-plane"></i>
+                <span>KIRIM</span>
+            </div>
+        </div>
+
+        <!-- RESET ICON -->
+        <div class="reset-icon" onclick="resetAllData()">
+            <i class="fas fa-undo"></i>
+        </div>
+    </div>
+
+    <!-- FULL SCREEN FORM - DESA -->
+    <div id="formDesa" class="fullscreen-form">
+        <div class="form-header">
+            <div class="back-icon" onclick="closeForm('desa')">
+                <i class="fas fa-arrow-left"></i>
+            </div>
+            <div class="form-title">PILIH DESA</div>
+            <div style="width:45px;"></div>
+        </div>
+
+        <select id="selectDesa" onchange="loadSelectedDesa()">
+            <option value="">-- Pilih Desa --</option>
+        </select>
+        
+        <div id="coordLoading" class="coord-loading hidden">
+            <i class="fas fa-spinner fa-spin"></i> Memuat koordinat...
+        </div>
+        
+        <div class="preview-text" id="previewDesa"></div>
+        <div class="preview-text" id="previewKoordinat">
+            <i class="fas fa-map-marker-alt"></i> <span id="coordDisplay">Pilih desa untuk koordinat</span>
+        </div>
+        
+        <div class="action-btn" style="margin-top:20px;" onclick="closeForm('desa')">SIMPAN</div>
+    </div>
+
+    <!-- FULL SCREEN FORM - FOTO -->
+    <div id="formFoto" class="fullscreen-form">
+        <div class="form-header">
+            <div class="back-icon" onclick="closeForm('foto')">
+                <i class="fas fa-arrow-left"></i>
+            </div>
+            <div class="form-title">FOTO</div>
+            <div style="width:45px;"></div>
+        </div>
+        
+        <div style="padding:10px; text-align:center;">
+            <div class="upload-icon">
+                <i class="fas fa-camera"></i>
+                <input type="file" id="gambar" accept="image/*" onchange="previewImage()">
+            </div>
+            <p style="margin:10px; color:#b0b0b0;">Upload foto kegiatan</p>
+            <div class="preview-text" id="previewGambar"></div>
+            <div class="action-btn" style="margin-top:15px;" onclick="closeForm('foto')">SIMPAN</div>
+        </div>
+    </div>
+
+    <!-- FULL SCREEN FORM - TANGGAL -->
+    <div id="formTanggal" class="fullscreen-form">
+        <div class="form-header">
+            <div class="back-icon" onclick="closeForm('tanggal')">
+                <i class="fas fa-arrow-left"></i>
+            </div>
+            <div class="form-title">TANGGAL</div>
+            <div style="width:45px;"></div>
+        </div>
+        
+        <div style="padding:10px;">
+            <input type="datetime-local" id="tanggalWaktu" style="width:100%; margin:15px 0;" onchange="updateDateTime()">
+            <div class="preview-text" id="previewTanggal"></div>
+            <div class="action-btn" style="margin-top:15px;" onclick="closeForm('tanggal')">SIMPAN</div>
+        </div>
+    </div>
+
+    <!-- FULL SCREEN FORM - NARASI -->
+    <div id="formNarasi" class="fullscreen-form">
+        <div class="form-header">
+            <div class="back-icon" onclick="closeForm('narasi')">
+                <i class="fas fa-arrow-left"></i>
+            </div>
+            <div class="form-title">NARASI</div>
+            <div style="width:45px;"></div>
+        </div>
+        
+        <textarea id="narasi" rows="4" placeholder="Masukkan narasi kegiatan..." style="margin:15px 0;" oninput="updateNarasi()"></textarea>
+        <div class="action-btn" onclick="closeForm('narasi')">SIMPAN</div>
+    </div>
+
+    <!-- FULL SCREEN FORM - KIRIM -->
+    <div id="formKirim" class="fullscreen-form">
+        <div class="form-header">
+            <div class="back-icon" onclick="closeForm('kirim')">
+                <i class="fas fa-arrow-left"></i>
+            </div>
+            <div class="form-title">KIRIM</div>
+            <div style="width:45px;"></div>
+        </div>
+        
+        <div style="padding:15px; text-align:center;">
+            <div class="action-btn" style="width:180px; margin:20px auto;" onclick="processSubmission()">
+                <i class="fas fa-paper-plane"></i> KIRIM
+            </div>
+            <div class="preview-text" id="kirimStatus"></div>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div id="toastMessage" class="toast"></div>
+
+    <script>
+        // ==================== GOOGLE APPS SCRIPT CONFIG ====================
+        // !!! GANTI URL INI DENGAN URL APPS SCRIPT ANDA YANG ASLI !!!
+        const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz-3Z-mRq7JLe-d4B85LY4A_rC4fDfeFmM6OelRl24FfEjeN-MW05Qk69fQyPF8w7bS/exec";
+        
+        // ==================== GITHUB CONFIG ====================
+        const GITHUB_USERNAME = "arta1979";
+        const GITHUB_REPO = "dukops2";
+        const GITHUB_BRANCH = "main";
+        
+        // URL untuk data dari GitHub
+        const DESA_LIST_URL = `https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO}/${GITHUB_BRANCH}/data/desa-list.json`;
+        const COORD_BASE_URL = `https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO}/${GITHUB_BRANCH}/data/coordinates/`;
+        
+        // ==================== GLOBAL VARIABLES ====================
+        let img = new Image();
+        let selectedDesa = "";
+        let selectedCoord = "";
+        let selectedDate = new Date();
+        let narasiText = "";
+        let deferredPrompt;
+        let appsScriptStatus = "unknown";
+        let isOnline = navigator.onLine;
+        
+        // Cache untuk data (hanya dari GitHub, tidak ada default di HTML)
+        let desaList = [];
+        let coordCache = {};
+        let pendingSubmissions = JSON.parse(localStorage.getItem('pendingSubmissions') || '[]');
+
+        // ==================== LOAD DAFTAR DESA DARI GITHUB ====================
+        async function loadDesaList() {
+            try {
+                // Coba ambil dari localStorage dulu
+                const cachedDesa = localStorage.getItem('desaList');
+                if (cachedDesa) {
+                    try {
+                        const parsed = JSON.parse(cachedDesa);
+                        if (Array.isArray(parsed)) {
+                            desaList = parsed;
+                        } else if (parsed && parsed.desaList) {
+                            desaList = parsed.desaList;
+                        }
+                        console.log('Loaded desa from cache:', desaList);
+                        populateDesaDropdown();
+                    } catch (e) {
+                        console.error('Error parsing cached desa:', e);
+                    }
+                }
+
+                if (isOnline) {
+                    // Coba ambil dari GitHub
+                    const response = await fetch(DESA_LIST_URL + '?t=' + Date.now());
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log('Raw desa data from GitHub:', data);
+                        
+                        if (Array.isArray(data)) {
+                            desaList = data;
+                        } else if (data && data.desaList) {
+                            desaList = data.desaList;
+                        }
+                        
+                        if (desaList.length > 0) {
+                            // Simpan ke cache
+                            localStorage.setItem('desaList', JSON.stringify(desaList));
+                            populateDesaDropdown();
+                            console.log('Loaded desa from GitHub:', desaList);
+                        } else {
+                            console.error('Desa list is empty from GitHub');
+                            document.getElementById('previewDesa').innerHTML = '<i class="fas fa-exclamation-circle"></i> Gagal memuat daftar desa';
+                        }
+                    } else {
+                        console.error('Failed to load desa list from GitHub:', response.status);
+                    }
+                }
+                
+                // Jika masih kosong, tampilkan pesan
+                if (desaList.length === 0) {
+                    console.error('No desa data available');
+                    document.getElementById('previewDesa').innerHTML = '<i class="fas fa-exclamation-circle"></i> Tidak ada data desa';
+                }
+            } catch (error) {
+                console.error('Error loading desa list:', error);
+                document.getElementById('previewDesa').innerHTML = '<i class="fas fa-exclamation-circle"></i> Error memuat data';
+            }
+        }
+
+        // ==================== POPULATE DROPDOWN DESA ====================
+        function populateDesaDropdown() {
+            const selectDesa = document.getElementById('selectDesa');
+            selectDesa.innerHTML = '<option value="">-- Pilih Desa --</option>';
+            
+            if (desaList.length === 0) {
+                selectDesa.innerHTML = '<option value="">-- Tidak ada data desa --</option>';
+                return;
+            }
+            
+            // Sort desaList alphabetically
+            const sortedDesa = [...desaList].sort();
+            
+            sortedDesa.forEach(desa => {
+                if (desa && desa.trim()) {
+                    selectDesa.add(new Option(desa, desa));
+                }
+            });
+            
+            console.log('Dropdown populated with', sortedDesa.length, 'desa');
+        }
+
+        // ==================== LOAD KOORDINAT DARI GITHUB PER DESA ====================
+        async function loadCoordinatesForDesa(desa) {
+            // Cek cache dulu
+            if (coordCache[desa]) {
+                console.log(`Using cached coordinates for ${desa}`);
+                return coordCache[desa];
+            }
+
+            // Cek localStorage
+            const cached = localStorage.getItem(`coord_${desa}`);
+            if (cached) {
+                try {
+                    const parsed = JSON.parse(cached);
+                    coordCache[desa] = parsed;
+                    return coordCache[desa];
+                } catch (e) {
+                    // Abaikan jika cache corrupt
+                }
+            }
+
+            if (!isOnline) {
+                // Jika offline, tidak ada data default
+                console.error(`Offline and no cached data for ${desa}`);
+                return null;
+            }
+
+            document.getElementById('coordLoading').classList.remove('hidden');
+            document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memuat...';
+            
+            try {
+                const fileName = desa + ".json";
+                const fileUrl = COORD_BASE_URL + fileName;
+                console.log(`Loading coordinates from: ${fileUrl}`);
+                
+                const response = await fetch(fileUrl + '?t=' + Date.now());
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log(`Loaded coordinates for ${desa}:`, data);
+                    
+                    // Validasi format
+                    if (data && data.coordinates && Array.isArray(data.coordinates) && data.coordinates.length > 0) {
+                        // Simpan ke cache
+                        coordCache[desa] = data;
+                        localStorage.setItem(`coord_${desa}`, JSON.stringify(data));
+                        
+                        document.getElementById('coordLoading').classList.add('hidden');
+                        return data;
+                    } else {
+                        console.error(`Invalid coordinate format for ${desa}:`, data);
+                        document.getElementById('coordLoading').classList.add('hidden');
+                        return null;
+                    }
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                console.error('Error loading coordinates:', error);
+                document.getElementById('coordLoading').classList.add('hidden');
+                return null;
+            }
+        }
+
+        // ==================== FUNGSI KOORDINAT OTOMATIS ====================
+        async function getRandomCoordForDesa(desa) {
+            if (!desa) {
+                console.error('No desa selected');
+                return null;
+            }
+            
+            const coordData = await loadCoordinatesForDesa(desa);
+            
+            if (coordData && coordData.coordinates && coordData.coordinates.length > 0) {
+                const randomIndex = Math.floor(Math.random() * coordData.coordinates.length);
+                const point = coordData.coordinates[randomIndex];
+                return `${point.lat}, ${point.lon}`;
+            }
+            
+            console.error(`No coordinates available for ${desa}`);
+            return null;
+        }
+
+        // ==================== UPDATE STAMP INFO ====================
+        async function updateStampInfo() {
+            document.getElementById('stampDesa').textContent = selectedDesa || '-';
+            
+            if (selectedDesa) {
+                document.getElementById('coordLoading').classList.remove('hidden');
+                selectedCoord = await getRandomCoordForDesa(selectedDesa);
+                document.getElementById('coordLoading').classList.add('hidden');
+                
+                if (selectedCoord) {
+                    document.getElementById('stampCoord').textContent = selectedCoord;
+                    document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> ' + selectedCoord;
+                } else {
+                    document.getElementById('stampCoord').textContent = 'Error';
+                    document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-exclamation-circle"></i> Gagal memuat koordinat';
+                }
+            } else {
+                document.getElementById('stampCoord').textContent = '-';
+                document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> Pilih desa untuk koordinat';
+            }
+            
+            if (selectedDate) {
+                const options = { day: '2-digit', month: '2-digit', year: 'numeric' };
+                const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+                
+                document.getElementById('stampTanggal').textContent = selectedDate.toLocaleDateString('id-ID', options);
+                document.getElementById('stampJam').textContent = selectedDate.toLocaleTimeString('id-ID', timeOptions);
+            }
+            
+            updateMainCanvas();
+        }
+
+        // ==================== UPDATE NETWORK STATUS ====================
+        function updateNetworkStatus() {
+            isOnline = navigator.onLine;
+            if (isOnline) {
+                document.getElementById('networkStatusText').innerHTML = '<span class="status-online">Online</span>';
+                document.getElementById('offlineBanner').classList.add('hidden');
+            } else {
+                document.getElementById('networkStatusText').innerHTML = '<span class="status-offline">Offline</span>';
+                document.getElementById('offlineBanner').classList.remove('hidden');
+            }
+        }
+
+        window.addEventListener('online', updateNetworkStatus);
+        window.addEventListener('offline', updateNetworkStatus);
+
+        // ==================== CEK KONEKSI APPS SCRIPT ====================
+        async function checkAppsScriptConnection() {
+            if (!isOnline) {
+                appsScriptStatus = 'offline';
+                document.getElementById('apiStatusText').innerHTML = '<span class="status-offline">Offline ✗</span>';
+                return false;
+            }
+
+            try {
+                document.getElementById('apiStatusText').innerHTML = 'Mengecek...';
+                
+                // Coba panggil action test dari Apps Script
+                const response = await fetch(APPS_SCRIPT_URL + '?action=test&t=' + Date.now());
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        appsScriptStatus = 'online';
+                        document.getElementById('apiStatusText').innerHTML = '<span class="status-online">Online ✓</span>';
+                        console.log('Apps Script connected:', data);
+                        
+                        // Kirim pending submissions jika ada
+                        processPendingSubmissions();
+                        return true;
+                    } else {
+                        throw new Error('Response not successful');
+                    }
+                } else {
+                    throw new Error('HTTP error: ' + response.status);
+                }
+            } catch (error) {
+                console.error('Apps Script connection failed:', error);
+                appsScriptStatus = 'offline';
+                document.getElementById('apiStatusText').innerHTML = '<span class="status-offline">Offline ✗</span>';
+                return false;
+            }
+        }
+
+        // ==================== PROCESS PENDING SUBMISSIONS ====================
+        async function processPendingSubmissions() {
+            if (pendingSubmissions.length === 0) return;
+            
+            console.log(`Processing ${pendingSubmissions.length} pending submissions...`);
+            
+            for (let submission of pendingSubmissions) {
+                try {
+                    const result = await uploadToTelegramAndDrive(
+                        submission.fileData, 
+                        submission.fileName, 
+                        submission.desaName
+                    );
+                    
+                    if (result.success) {
+                        pendingSubmissions = pendingSubmissions.filter(s => s.id !== submission.id);
+                        localStorage.setItem('pendingSubmissions', JSON.stringify(pendingSubmissions));
+                        showToast(`Pending submission ${submission.fileName} terkirim!`);
+                    }
+                } catch (error) {
+                    console.error('Failed to send pending submission:', error);
+                }
+            }
+        }
+
+        // ==================== CALL APPS SCRIPT FUNCTION ====================
+        async function callAppsScript(action, data = {}) {
+            if (!isOnline) {
+                return { success: false, error: 'offline', offline: true };
+            }
+
+            try {
+                const formData = new URLSearchParams();
+                formData.append('action', action);
+                
+                for (let key in data) {
+                    if (data.hasOwnProperty(key)) {
+                        formData.append(key, data[key]);
+                    }
+                }
+
+                const response = await fetch(APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: formData.toString()
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('Apps Script response:', result);
+                    return result;
+                } else {
+                    console.error('HTTP error:', response.status);
+                    return { success: false, error: 'HTTP error: ' + response.status };
+                }
+            } catch (error) {
+                console.error('Apps Script call error:', error);
+                return { success: false, error: error.message, offline: !isOnline };
+            }
+        }
+
+        // ==================== UPLOAD TO TELEGRAM & DRIVE ====================
+        async function uploadToTelegramAndDrive(fileData, fileName, desaName) {
+            showToast('Mengirim ke server...');
+            
+            // Kirim ke Telegram via Apps Script
+            const telegramResult = await callAppsScript('sendTelegram', {
+                fileName: fileName,
+                fileData: fileData,
+                desaName: desaName,
+                mimeType: 'application/zip'
+            });
+            
+            if (telegramResult.success) {
+                console.log('Telegram success:', telegramResult);
+                
+                // Upload ke Drive via Apps Script
+                const now = new Date();
+                const year = now.getFullYear().toString();
+                const month = now.toLocaleDateString('id-ID', { month: 'long' });
+                
+                const driveResult = await callAppsScript('uploadDrive', {
+                    fileName: fileName,
+                    fileData: fileData,
+                    desa: desaName,
+                    year: year,
+                    month: month,
+                    mimeType: 'application/zip'
+                });
+                
+                if (driveResult.success) {
+                    console.log('Drive success:', driveResult);
+                    return { success: true, telegram: telegramResult, drive: driveResult };
+                } else {
+                    console.warn('Drive upload failed but Telegram OK');
+                    return { success: true, telegram: telegramResult, drive: driveResult };
+                }
+            } else {
+                console.error('Telegram upload failed:', telegramResult);
+                return telegramResult;
+            }
+        }
+
+        // ==================== PWA INSTALL PROMPT ====================
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            document.getElementById('installButton').style.display = 'flex';
+            
+            document.getElementById('installButton').addEventListener('click', () => {
+                document.getElementById('installButton').style.display = 'none';
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('User accepted install');
+                    }
+                    deferredPrompt = null;
+                });
+            });
+        });
+
+        // ==================== SERVICE WORKER ====================
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').then(registration => {
+                    console.log('ServiceWorker registered');
+                    
+                    registration.addEventListener('updatefound', () => {
+                        const newWorker = registration.installing;
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                document.getElementById('updateNotification').style.display = 'flex';
+                            }
+                        });
+                    });
+                }).catch(err => {
+                    console.log('ServiceWorker registration failed:', err);
+                });
+            });
+
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                window.location.reload();
+            });
+        }
+
+        window.updateApp = function() {
+            document.getElementById('updateNotification').style.display = 'none';
+            if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({ action: 'skipWaiting' });
+            }
+        };
+
+        // ==================== INITIALIZATION ====================
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Update network status
+            updateNetworkStatus();
+            
+            // Load desa list dari GitHub (tidak ada default)
+            await loadDesaList();
+            
+            // Cek koneksi Apps Script
+            await checkAppsScriptConnection();
+
+            // Set default date
+            const now = new Date();
+            selectedDate = now;
+            document.getElementById('tanggalWaktu').value = now.toISOString().slice(0, 16);
+            
+            // Update stamp dan canvas
+            updateStampInfo();
+            drawDefaultCanvas();
+
+            // Splash screen
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += 10;
+                document.getElementById('splashProgress').style.width = progress + '%';
+                if (progress >= 100) {
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        document.getElementById('splashScreen').style.display = 'none';
+                        document.getElementById('mainMenu').classList.remove('hidden');
+                    }, 500);
+                }
+            }, 200);
+        });
+
+        // ==================== CANVAS FUNCTIONS ====================
+        function drawDefaultCanvas() {
+            const canvas = document.getElementById('mainCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = '#0a120a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = '#9fd49f';
+            ctx.font = 'bold 22px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('DUKOPS', canvas.width/2, canvas.height/2 - 15);
+            
+            ctx.font = '14px Arial';
+            ctx.fillStyle = '#b0b0b0';
+            ctx.fillText('KORAMIL 1609-05/SUKASADA', canvas.width/2, canvas.height/2 + 15);
+        }
+
+        function updateMainCanvas() {
+            const canvas = document.getElementById('mainCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            if (img.src && img.complete) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 16px Arial';
+                ctx.textAlign = 'right';
+                ctx.shadowColor = 'black';
+                ctx.shadowBlur = 5;
+                
+                const desa = selectedDesa || 'Pilih Desa';
+                const coord = selectedCoord || '-';
+                
+                if (selectedDate) {
+                    const options = { 
+                        day: '2-digit', 
+                        month: '2-digit', 
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    };
+                    const dateStr = selectedDate.toLocaleDateString('id-ID', options).replace(/\//g, '-');
+                    
+                    ctx.fillText(desa, canvas.width - 10, canvas.height - 80);
+                    ctx.fillText(coord, canvas.width - 10, canvas.height - 55);
+                    ctx.fillText(dateStr, canvas.width - 10, canvas.height - 30);
+                } else {
+                    ctx.fillText(desa, canvas.width - 10, canvas.height - 55);
+                    ctx.fillText(coord, canvas.width - 10, canvas.height - 30);
+                }
+                
+                ctx.shadowColor = 'transparent';
+            } else {
+                drawDefaultCanvas();
+            }
+        }
+
+        // ==================== UPDATE RUNNING TEXT ====================
+        function updateNarasi() {
+            narasiText = document.getElementById('narasi').value;
+            const runningText = document.getElementById('runningText');
+            runningText.innerHTML = `<i class="fas fa-chevron-right"></i> ${narasiText || 'Belum ada narasi'} <i class="fas fa-chevron-left"></i>`;
+        }
+
+        // ==================== FORM NAVIGATION ====================
+        function openForm(formName) {
+            document.getElementById('mainMenu').classList.add('hidden');
+            document.getElementById('formDesa').classList.remove('active');
+            document.getElementById('formFoto').classList.remove('active');
+            document.getElementById('formTanggal').classList.remove('active');
+            document.getElementById('formNarasi').classList.remove('active');
+            document.getElementById('formKirim').classList.remove('active');
+            
+            if (formName === 'desa') {
+                document.getElementById('formDesa').classList.add('active');
+            } else if (formName === 'foto') {
+                document.getElementById('formFoto').classList.add('active');
+            } else if (formName === 'tanggal') {
+                document.getElementById('formTanggal').classList.add('active');
+            } else if (formName === 'narasi') {
+                document.getElementById('formNarasi').classList.add('active');
+            } else if (formName === 'kirim') {
+                document.getElementById('formKirim').classList.add('active');
+            }
+        }
+
+        function closeForm(formName) {
+            document.getElementById('mainMenu').classList.remove('hidden');
+            document.getElementById('formDesa').classList.remove('active');
+            document.getElementById('formFoto').classList.remove('active');
+            document.getElementById('formTanggal').classList.remove('active');
+            document.getElementById('formNarasi').classList.remove('active');
+            document.getElementById('formKirim').classList.remove('active');
+            
+            updateStampInfo();
+        }
+
+        function goToMainMenu() {
+            document.getElementById('mainMenu').classList.remove('hidden');
+            document.getElementById('formDesa').classList.remove('active');
+            document.getElementById('formFoto').classList.remove('active');
+            document.getElementById('formTanggal').classList.remove('active');
+            document.getElementById('formNarasi').classList.remove('active');
+            document.getElementById('formKirim').classList.remove('active');
+        }
+
+        // ==================== DESA ====================
+        async function loadSelectedDesa() {
+            const select = document.getElementById('selectDesa');
+            selectedDesa = select.value;
+            document.getElementById('previewDesa').innerHTML = '<i class="fas fa-check-circle"></i> ' + (selectedDesa || '');
+            
+            if (selectedDesa) {
+                document.getElementById('coordLoading').classList.remove('hidden');
+                selectedCoord = await getRandomCoordForDesa(selectedDesa);
+                document.getElementById('coordLoading').classList.add('hidden');
+                
+                if (selectedCoord) {
+                    document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> ' + selectedCoord;
+                } else {
+                    document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-exclamation-circle"></i> Gagal memuat koordinat';
+                }
+            } else {
+                document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> Pilih desa untuk koordinat';
+            }
+            
+            updateStampInfo();
+        }
+
+        // ==================== GAMBAR ====================
+        function previewImage() {
+            const file = document.getElementById('gambar').files[0];
+            if (file) {
+                document.getElementById('previewGambar').innerHTML = '<i class="fas fa-check-circle"></i> ' + file.name;
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    img = new Image();
+                    img.src = e.target.result;
+                    img.onload = function() {
+                        updateMainCanvas();
+                    };
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // ==================== TANGGAL & WAKTU ====================
+        function updateDateTime() {
+            const tglInput = document.getElementById('tanggalWaktu').value;
+            if (tglInput) {
+                selectedDate = new Date(tglInput);
+                selectedDate.setSeconds(Math.floor(Math.random() * 60));
+                
+                const options = { 
+                    day: '2-digit', 
+                    month: 'long', 
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                };
+                
+                document.getElementById('previewTanggal').innerHTML = '<i class="fas fa-calendar-check"></i> ' + 
+                    selectedDate.toLocaleDateString('id-ID', options);
+                
+                updateStampInfo();
+            }
+        }
+
+        // ==================== RESET ====================
+        function resetAllData() {
+            if (confirm('Reset semua data?')) {
+                img = new Image();
+                selectedDesa = "";
+                selectedCoord = "";
+                narasiText = "";
+                selectedDate = new Date();
+                
+                document.getElementById('gambar').value = '';
+                document.getElementById('narasi').value = '';
+                document.getElementById('selectDesa').value = '';
+                document.getElementById('previewGambar').innerHTML = '';
+                document.getElementById('previewDesa').innerHTML = '';
+                document.getElementById('previewTanggal').innerHTML = '';
+                document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> Pilih desa untuk koordinat';
+                
+                document.getElementById('runningText').innerHTML = '<i class="fas fa-chevron-right"></i> Belum ada narasi <i class="fas fa-chevron-left"></i>';
+                
+                const now = new Date();
+                selectedDate = now;
+                document.getElementById('tanggalWaktu').value = now.toISOString().slice(0, 16);
+                
+                updateStampInfo();
+                drawDefaultCanvas();
+                
+                showToast('Semua data direset');
+            }
+        }
+
+        // ==================== SUBMIT ====================
+        async function processSubmission() {
+            if (!selectedDesa) {
+                showToast('Pilih desa dulu');
+                return;
+            }
+            
+            if (!img.src || !img.complete) {
+                showToast('Upload foto dulu');
+                return;
+            }
+
+            if (!selectedCoord) {
+                showToast('Koordinat tidak tersedia');
+                return;
+            }
+
+            const canvas = document.getElementById('mainCanvas');
+            const imgData = canvas.toDataURL('image/png').split(',')[1];
+            const narasi = document.getElementById('narasi').value || '-';
+            const date = selectedDate;
+
+            const namaFile = selectedDesa.replace(/[^a-z0-9]/gi, '_') + '_' + 
+                            date.getDate() + '_' + (date.getMonth()+1) + '_' +
+                            date.getHours() + date.getMinutes() + date.getSeconds();
+
+            const zip = new JSZip();
+            zip.file(namaFile + '.txt', narasi);
+            zip.file(namaFile + '.png', imgData, { base64: true });
+
+            zip.generateAsync({ type: 'blob' }).then(async function(content) {
+                const reader = new FileReader();
+                reader.readAsDataURL(content);
+                reader.onload = async function() {
+                    const base64Data = reader.result.split(',')[1];
+                    
+                    showToast('Mengirim ke server...');
+                    
+                    const result = await uploadToTelegramAndDrive(base64Data, namaFile + '.zip', selectedDesa);
+                    
+                    if (result && result.success) {
+                        document.getElementById('kirimStatus').innerHTML = '<i class="fas fa-check-circle"></i> Terkirim!';
+                        showToast('Terkirim ke Telegram & Drive!');
+                        
+                        setTimeout(() => {
+                            goToMainMenu();
+                        }, 1500);
+                    } else if (result && result.offline) {
+                        const pendingId = Date.now();
+                        pendingSubmissions.push({
+                            id: pendingId,
+                            fileName: namaFile + '.zip',
+                            fileData: base64Data,
+                            desaName: selectedDesa
+                        });
+                        localStorage.setItem('pendingSubmissions', JSON.stringify(pendingSubmissions));
+                        
+                        document.getElementById('kirimStatus').innerHTML = '<i class="fas fa-clock"></i> Disimpan (offline)';
+                        showToast('Data disimpan, akan dikirim saat online');
+                        
+                        setTimeout(() => {
+                            goToMainMenu();
+                        }, 1500);
+                    } else {
+                        document.getElementById('kirimStatus').innerHTML = '<i class="fas fa-times-circle"></i> Gagal!';
+                        showToast('Gagal kirim: ' + (result ? result.error : 'Unknown error'));
+                    }
+                };
+            });
+        }
+
+        // ==================== TOAST ====================
+        function showToast(msg) {
+            const toast = document.getElementById('toastMessage');
+            toast.textContent = msg;
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.display = 'none', 2000);
+        }
+
+        // ==================== WINDOW EXPORTS ====================
+        window.openForm = openForm;
+        window.closeForm = closeForm;
+        window.goToMainMenu = goToMainMenu;
+        window.loadSelectedDesa = loadSelectedDesa;
+        window.previewImage = previewImage;
+        window.updateDateTime = updateDateTime;
+        window.updateNarasi = updateNarasi;
+        window.processSubmission = processSubmission;
+        window.resetAllData = resetAllData;
+    </script>
+</body>
+</html>
