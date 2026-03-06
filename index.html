@@ -719,6 +719,16 @@
         // ROOT FOLDER ID (sesuai dengan Apps Script)
         const ROOT_FOLDER_ID = "1T_YbloMtm-nfqO8ewhNPYwYX4XS5E1B-";
         
+        // ==================== TELEGRAM BOT CONFIG ====================
+        // Bot untuk input laporan (Babinsa)
+        const TELEGRAM_INPUT_TOKEN = "7580586404:AAFi3ySF36vBtLUiZUUsUrWuszBF2lBz7W0";
+        const TELEGRAM_INPUT_CHAT_ID = "2095166318";
+        
+        // Bot untuk laporan unzip dan notifikasi sistem (Koramil)
+        const TELEGRAM_REPORT_TOKEN = "7591221480:AAFjogAiM_Dywo4SHOLVphpiZQgUcq48IDc";
+        const TELEGRAM_REPORT_CHAT_ID = "2095166318";
+        const TELEGRAM_REPORT_CHANNEL_ID = "-1003473372527";
+        
         // ==================== GITHUB CONFIG ====================
         const GITHUB_USERNAME = "arta1979";
         const GITHUB_REPO = "dukops2";
@@ -1177,22 +1187,57 @@
                 showToast('✅ File berhasil diupload ke Drive!');
                 console.log('Drive upload success:', result);
                 
-                // Kirim notifikasi ke Telegram
-                await callAppsScript('sendTelegramText', {
-                    message: `📁 *Laporan DUKOPS Terkirim*\n\n` +
-                             `📍 Desa: ${desaName}\n` +
-                             `📅 Tanggal: ${selectedDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}\n` +
-                             `⏰ Jam: ${selectedDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}\n` +
-                             `📂 File: ${fileName}\n\n` +
-                             `🗂️ Path: ${year}/${month}/${desaName}/`,
-                    chatId: TELEGRAM_CHAT_ID
-                });
+                // Kirim notifikasi ke Bot Input (Babinsa)
+                await sendTelegramMessage(
+                    TELEGRAM_INPUT_TOKEN,
+                    TELEGRAM_INPUT_CHAT_ID,
+                    `📤 *Laporan Terkirim*\n\n` +
+                    `📍 Desa: ${desaName}\n` +
+                    `📅 Tanggal: ${selectedDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}\n` +
+                    `⏰ Jam: ${selectedDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}\n` +
+                    `📂 File: ${fileName}\n\n` +
+                    `🗂️ Path: ${year}/${month}/${desaName}/`
+                );
                 
                 return true;
             } else {
                 showToast('❌ Gagal upload ke Drive');
                 console.error('Drive upload failed:', result);
+                
+                // Kirim notifikasi gagal ke Bot Input
+                await sendTelegramMessage(
+                    TELEGRAM_INPUT_TOKEN,
+                    TELEGRAM_INPUT_CHAT_ID,
+                    `❌ *Gagal Mengirim Laporan*\n\n` +
+                    `📍 Desa: ${desaName}\n` +
+                    `📅 Tanggal: ${selectedDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}\n` +
+                    `⏰ Jam: ${selectedDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}\n` +
+                    `❌ Error: ${result?.error || 'Unknown error'}`
+                );
+                
                 return false;
+            }
+        }
+
+        // ==================== SEND TELEGRAM MESSAGE ====================
+        async function sendTelegramMessage(token, chatId, message) {
+            try {
+                const url = `https://api.telegram.org/bot${token}/sendMessage`;
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        text: message,
+                        parse_mode: 'Markdown'
+                    })
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('Failed to send Telegram message:', error);
+                return null;
             }
         }
 
