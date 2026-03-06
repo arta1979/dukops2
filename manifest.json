@@ -20,5 +20,21 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Buat Laporan",
+      "short_name": "Laporan",
+      "description": "Buat laporan DUKOPS baru",
+      "url": "/?action=new",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Jadwal Piket",
+      "short_name": "Piket",
+      "description": "Lihat jadwal piket",
+      "url": "/?action=piket",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    }
   ]
 }
