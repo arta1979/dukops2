@@ -558,7 +558,7 @@
     <!-- LOADING OVERLAY -->
     <div id="loadingOverlay" class="loading-overlay">
         <div class="loading-spinner"></div>
-        <div class="loading-text" id="loadingText">Mengirim ke Drive...</div>
+        <div class="loading-text" id="loadingText">Mengirim ke Telegram...</div>
     </div>
 
     <!-- MAIN MENU -->
@@ -720,11 +720,11 @@
         const ROOT_FOLDER_ID = "1T_YbloMtm-nfqO8ewhNPYwYX4XS5E1B-";
         
         // ==================== TELEGRAM BOT CONFIG ====================
-        // Bot untuk input laporan (Babinsa)
-        const TELEGRAM_INPUT_TOKEN = "7580586404:AAFi3ySF36vBtLUiZUUsUrWuszBF2lBz7W0";
-        const TELEGRAM_INPUT_CHAT_ID = "2095166318";
+        // Bot untuk menerima file ZIP (BabinsaInputBot)
+        const TELEGRAM_ZIP_TOKEN = "7580586404:AAFi3ySF36vBtLUiZUUsUrWuszBF2lBz7W0";
+        const TELEGRAM_ZIP_CHAT_ID = "2095166318";
         
-        // Bot untuk laporan unzip dan notifikasi sistem (Koramil)
+        // Bot untuk laporan sistem (Babinsakoramil05Bot)
         const TELEGRAM_REPORT_TOKEN = "7591221480:AAFjogAiM_Dywo4SHOLVphpiZQgUcq48IDc";
         const TELEGRAM_REPORT_CHAT_ID = "2095166318";
         const TELEGRAM_REPORT_CHANNEL_ID = "-1003473372527";
@@ -1164,55 +1164,69 @@
             }
         }
 
-        // ==================== UPLOAD TO DRIVE ====================
-        async function uploadToDrive(fileData, fileName, desaName) {
-            showLoading(true, 'Mengirim ke Google Drive...');
+        // ==================== SEND FILE TO TELEGRAM ====================
+        async function sendFileToTelegram(fileData, fileName, desaName) {
+            showLoading(true, 'Mengirim ke Telegram...');
             
-            const now = new Date();
-            const year = now.getFullYear().toString();
-            const month = now.toLocaleDateString('id-ID', { month: 'long' });
-            
-            const result = await callAppsScript('uploadDrive', {
-                fileName: fileName,
-                fileData: fileData,
-                desa: desaName,
-                year: year,
-                month: month,
-                mimeType: 'application/zip'
-            });
-            
-            showLoading(false);
-            
-            if (result && result.success) {
-                showToast('✅ File berhasil diupload ke Drive!');
-                console.log('Drive upload success:', result);
+            try {
+                // Kirim file ZIP ke @BabinsaInputBot
+                const formData = new FormData();
+                formData.append('chat_id', TELEGRAM_ZIP_CHAT_ID);
                 
-                // Kirim notifikasi ke Bot Input (Babinsa)
+                // Konversi base64 ke blob
+                const byteCharacters = atob(fileData);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const blob = new Blob([byteArray], { type: 'application/zip' });
+                
+                formData.append('document', blob, fileName);
+                formData.append('caption', `📁 *Laporan DUKOPS*\n📍 Desa: ${desaName}\n📅 ${selectedDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}\n⏰ ${selectedDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`);
+
+                const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_ZIP_TOKEN}/sendDocument`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                showLoading(false);
+                
+                if (result.ok) {
+                    showToast('✅ File ZIP terkirim ke Telegram!');
+                    console.log('Telegram send success:', result);
+                    
+                    // Kirim notifikasi sukses ke bot report
+                    await sendTelegramMessage(
+                        TELEGRAM_REPORT_TOKEN,
+                        TELEGRAM_REPORT_CHAT_ID,
+                        `✅ *File ZIP Terkirim*\n📍 Desa: ${desaName}\n📂 File: ${fileName}\n⏰ ${new Date().toLocaleTimeString('id-ID')}`
+                    );
+                    
+                    return true;
+                } else {
+                    showToast('❌ Gagal kirim ke Telegram');
+                    console.error('Telegram send failed:', result);
+                    
+                    // Kirim notifikasi gagal ke bot report
+                    await sendTelegramMessage(
+                        TELEGRAM_REPORT_TOKEN,
+                        TELEGRAM_REPORT_CHAT_ID,
+                        `❌ *Gagal Kirim File ZIP*\n📍 Desa: ${desaName}\n📂 File: ${fileName}\n⏰ ${new Date().toLocaleTimeString('id-ID')}\nError: ${result.description}`
+                    );
+                    
+                    return false;
+                }
+            } catch (error) {
+                showLoading(false);
+                showToast('❌ Error kirim ke Telegram');
+                console.error('Telegram send error:', error);
+                
                 await sendTelegramMessage(
-                    TELEGRAM_INPUT_TOKEN,
-                    TELEGRAM_INPUT_CHAT_ID,
-                    `📤 *Laporan Terkirim*\n\n` +
-                    `📍 Desa: ${desaName}\n` +
-                    `📅 Tanggal: ${selectedDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}\n` +
-                    `⏰ Jam: ${selectedDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}\n` +
-                    `📂 File: ${fileName}\n\n` +
-                    `🗂️ Path: ${year}/${month}/${desaName}/`
-                );
-                
-                return true;
-            } else {
-                showToast('❌ Gagal upload ke Drive');
-                console.error('Drive upload failed:', result);
-                
-                // Kirim notifikasi gagal ke Bot Input
-                await sendTelegramMessage(
-                    TELEGRAM_INPUT_TOKEN,
-                    TELEGRAM_INPUT_CHAT_ID,
-                    `❌ *Gagal Mengirim Laporan*\n\n` +
-                    `📍 Desa: ${desaName}\n` +
-                    `📅 Tanggal: ${selectedDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}\n` +
-                    `⏰ Jam: ${selectedDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}\n` +
-                    `❌ Error: ${result?.error || 'Unknown error'}`
+                    TELEGRAM_REPORT_TOKEN,
+                    TELEGRAM_REPORT_CHAT_ID,
+                    `❌ *Error Kirim File ZIP*\n📍 Desa: ${desaName}\n📂 File: ${fileName}\n⏰ ${new Date().toLocaleTimeString('id-ID')}\nError: ${error.message}`
                 );
                 
                 return false;
@@ -1241,8 +1255,54 @@
             }
         }
 
+        // ==================== UPLOAD TO DRIVE ====================
+        async function uploadToDrive(fileData, fileName, desaName) {
+            showLoading(true, 'Mengirim ke Google Drive...');
+            
+            const now = new Date();
+            const year = now.getFullYear().toString();
+            const month = now.toLocaleDateString('id-ID', { month: 'long' });
+            
+            const result = await callAppsScript('uploadDrive', {
+                fileName: fileName,
+                fileData: fileData,
+                desa: desaName,
+                year: year,
+                month: month,
+                mimeType: 'application/zip'
+            });
+            
+            showLoading(false);
+            
+            if (result && result.success) {
+                showToast('✅ File berhasil diupload ke Drive!');
+                console.log('Drive upload success:', result);
+                
+                // Kirim notifikasi sukses ke bot report
+                await sendTelegramMessage(
+                    TELEGRAM_REPORT_TOKEN,
+                    TELEGRAM_REPORT_CHAT_ID,
+                    `✅ *File ZIP Tersimpan di Drive*\n📍 Desa: ${desaName}\n📂 File: ${fileName}\n🗂️ Path: ${year}/${month}/${desaName}/\n⏰ ${new Date().toLocaleTimeString('id-ID')}`
+                );
+                
+                return true;
+            } else {
+                showToast('❌ Gagal upload ke Drive');
+                console.error('Drive upload failed:', result);
+                
+                // Kirim notifikasi gagal ke bot report
+                await sendTelegramMessage(
+                    TELEGRAM_REPORT_TOKEN,
+                    TELEGRAM_REPORT_CHAT_ID,
+                    `❌ *Gagal Upload ke Drive*\n📍 Desa: ${desaName}\n📂 File: ${fileName}\n⏰ ${new Date().toLocaleTimeString('id-ID')}\nError: ${result?.error || 'Unknown error'}`
+                );
+                
+                return false;
+            }
+        }
+
         // ==================== LOADING OVERLAY ====================
-        function showLoading(show, message = 'Mengirim ke Drive...') {
+        function showLoading(show, message = 'Mengirim ke Telegram...') {
             const overlay = document.getElementById('loadingOverlay');
             const text = document.getElementById('loadingText');
             
@@ -1318,10 +1378,13 @@
                 reader.onload = async function() {
                     const base64Data = reader.result.split(',')[1];
                     
-                    // Upload langsung ke Drive
-                    const success = await uploadToDrive(base64Data, zipFileName, selectedDesa);
+                    // 1. Kirim ke Telegram dulu (@BabinsaInputBot)
+                    const telegramSuccess = await sendFileToTelegram(base64Data, zipFileName, selectedDesa);
                     
-                    if (success) {
+                    if (telegramSuccess) {
+                        // 2. Upload ke Google Drive sebagai backup
+                        await uploadToDrive(base64Data, zipFileName, selectedDesa);
+                        
                         // Reset form setelah sukses
                         setTimeout(() => {
                             resetAllData();
