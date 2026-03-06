@@ -37,7 +37,7 @@
             overflow: hidden;
         }
 
-        /* SPLASH SCREEN - VERSI BARU LEBIH BAGUS */
+        /* SPLASH SCREEN - 3 LOTUS BETERBANGAN MENYATU */
         #splashScreen {
             position: fixed;
             top: 0;
@@ -50,26 +50,46 @@
             align-items: center;
             justify-content: center;
             z-index: 9999;
-            transition: opacity 0.5s ease;
+            transition: opacity 0.8s ease;
+            overflow: hidden;
         }
 
-        .splash-logo {
-            width: 120px;
-            height: 120px;
-            background: #2a4f2a;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 25px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-            border: 3px solid #9fd49f;
-            animation: pulse 2s infinite;
+        .lotus-container {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin-bottom: 30px;
         }
 
-        .splash-logo i {
-            font-size: 60px;
+        .lotus {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            filter: drop-shadow(0 0 15px rgba(159, 212, 159, 0.6));
+        }
+
+        .lotus i {
+            font-size: 70px;
             color: #9fd49f;
+            opacity: 0.9;
+        }
+
+        #lotus1 {
+            top: 0;
+            left: 0;
+            animation: float1 3s ease-in-out infinite;
+        }
+
+        #lotus2 {
+            top: 0;
+            right: 0;
+            animation: float2 3s ease-in-out infinite;
+        }
+
+        #lotus3 {
+            bottom: 0;
+            left: 60px;
+            animation: float3 3s ease-in-out infinite;
         }
 
         .splash-title {
@@ -79,13 +99,16 @@
             margin-bottom: 10px;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
             letter-spacing: 2px;
+            opacity: 0;
+            animation: fadeIn 1s ease 2s forwards;
         }
 
         .splash-subtitle {
             color: #e0e0e0;
             font-size: 16px;
             margin-bottom: 30px;
-            opacity: 0.9;
+            opacity: 0;
+            animation: fadeIn 1s ease 2.2s forwards;
         }
 
         .splash-progress-container {
@@ -96,6 +119,8 @@
             overflow: hidden;
             margin-top: 20px;
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+            opacity: 0;
+            animation: fadeIn 1s ease 2.4s forwards;
         }
 
         .splash-progress-bar {
@@ -110,12 +135,81 @@
             color: #b0b0b0;
             font-size: 14px;
             margin-top: 15px;
+            opacity: 0;
+            animation: fadeIn 1s ease 2.6s forwards;
         }
 
-        @keyframes pulse {
-            0% { transform: scale(1); box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
-            50% { transform: scale(1.05); box-shadow: 0 15px 35px rgba(0,0,0,0.4); }
-            100% { transform: scale(1); box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes float1 {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            25% { transform: translate(-20px, -15px) rotate(-5deg); }
+            50% { transform: translate(-35px, -25px) rotate(-10deg); }
+            75% { transform: translate(-20px, -15px) rotate(-5deg); }
+            100% { transform: translate(0, 0) rotate(0deg); }
+        }
+        
+        @keyframes float2 {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            25% { transform: translate(20px, -15px) rotate(5deg); }
+            50% { transform: translate(35px, -25px) rotate(10deg); }
+            75% { transform: translate(20px, -15px) rotate(5deg); }
+            100% { transform: translate(0, 0) rotate(0deg); }
+        }
+        
+        @keyframes float3 {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            25% { transform: translate(0, 15px) rotate(0deg); }
+            50% { transform: translate(0, 25px) rotate(0deg); }
+            75% { transform: translate(0, 15px) rotate(0deg); }
+            100% { transform: translate(0, 0) rotate(0deg); }
+        }
+        
+        @keyframes mergeGlow {
+            0% { filter: drop-shadow(0 0 5px rgba(159, 212, 159, 0.3)); }
+            50% { filter: drop-shadow(0 0 30px rgba(159, 212, 159, 0.9)); }
+            100% { filter: drop-shadow(0 0 20px rgba(159, 212, 159, 0.6)); }
+        }
+        
+        .merging #lotus1 {
+            animation: mergeGlow 2s ease-out forwards, moveToCenter1 2s ease-out forwards;
+        }
+        
+        .merging #lotus2 {
+            animation: mergeGlow 2s ease-out forwards, moveToCenter2 2s ease-out forwards;
+        }
+        
+        .merging #lotus3 {
+            animation: mergeGlow 2s ease-out forwards, moveToCenter3 2s ease-out forwards;
+        }
+        
+        @keyframes moveToCenter1 {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            100% { transform: translate(60px, 60px) rotate(360deg); }
+        }
+        
+        @keyframes moveToCenter2 {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            100% { transform: translate(-60px, 60px) rotate(-360deg); }
+        }
+        
+        @keyframes moveToCenter3 {
+            0% { transform: translate(0, 0) rotate(0deg); }
+            100% { transform: translate(0, -60px) rotate(180deg); }
+        }
+        
+        .merged #lotus1, .merged #lotus2, .merged #lotus3 {
+            animation: finalPulse 2s infinite;
+            opacity: 0.8;
+        }
+        
+        @keyframes finalPulse {
+            0% { transform: scale(1); filter: drop-shadow(0 0 20px rgba(159, 212, 159, 0.6)); }
+            50% { transform: scale(1.1); filter: drop-shadow(0 0 40px rgba(159, 212, 159, 0.9)); }
+            100% { transform: scale(1); filter: drop-shadow(0 0 20px rgba(159, 212, 159, 0.6)); }
         }
 
         /* INSTALL BUTTON */
@@ -573,22 +667,33 @@
     </style>
 </head>
 <body class="no-scroll">
-    <!-- SPLASH SCREEN - VERSI BARU LEBIH BAGUS -->
+    <!-- SPLASH SCREEN - 3 LOTUS BETERBANGAN MENYATU -->
     <div id="splashScreen">
-        <div class="splash-logo">
-            <i class="fas fa-map-marked-alt"></i>
+        <div class="lotus-container">
+            <div id="lotus1" class="lotus">
+                <i class="fas fa-map-marked-alt"></i>
+            </div>
+            <div id="lotus2" class="lotus">
+                <i class="fas fa-map-marked-alt"></i>
+            </div>
+            <div id="lotus3" class="lotus">
+                <i class="fas fa-map-marked-alt"></i>
+            </div>
         </div>
+        
         <h1 class="splash-title">DUKOPS</h1>
         <p class="splash-subtitle">KORAMIL 1609-05/SUKASADA</p>
+        
         <div class="splash-progress-container">
             <div id="splashProgress" class="splash-progress-bar"></div>
         </div>
+        
         <p class="splash-loading-text" id="loadingStatusText">Memuat aplikasi...</p>
     </div>
 
     <!-- INSTALL BUTTON -->
     <div id="installButton">
-        <i class="fas fa-download">🤖Install</i>
+        <i class="fas fa-download"></i>
     </div>
 
     <!-- UPDATE NOTIFICATION -->
@@ -1312,15 +1417,32 @@
             updateStampInfo();
             drawDefaultCanvas();
 
+            // Animasi merge untuk lotus
+            const splashScreen = document.getElementById('splashScreen');
             let progress = 0;
-            const interval = setInterval(() => {
+            
+            const interval = setInterval(function() {
                 progress += 10;
                 document.getElementById('splashProgress').style.width = progress + '%';
+                
+                // Animasi merge saat progress mencapai 70%
+                if (progress >= 70 && !splashScreen.classList.contains('merging')) {
+                    splashScreen.classList.add('merging');
+                    
+                    setTimeout(function() {
+                        splashScreen.classList.remove('merging');
+                        splashScreen.classList.add('merged');
+                    }, 2000);
+                }
+                
                 if (progress >= 100) {
                     clearInterval(interval);
                     setTimeout(() => {
-                        document.getElementById('splashScreen').style.display = 'none';
-                        document.getElementById('mainMenu').classList.remove('hidden');
+                        splashScreen.style.opacity = '0';
+                        setTimeout(() => {
+                            splashScreen.style.display = 'none';
+                            document.getElementById('mainMenu').classList.remove('hidden');
+                        }, 800);
                     }, 500);
                 }
             }, 200);
