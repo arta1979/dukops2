@@ -191,6 +191,7 @@
             white-space: nowrap;
             border-top: 1px solid #2a3f2a;
             border-bottom: 1px solid #2a3f2a;
+            cursor: pointer;
         }
 
         .running-text {
@@ -318,7 +319,7 @@
         }
 
         /* FORM ELEMENTS */
-        select, input, textarea {
+        select, input[type="file"], input[type="datetime-local"] {
             width: 100%;
             background: #2a3f2a;
             color: #e0e0e0;
@@ -333,10 +334,25 @@
             background: #1a2a1a;
         }
 
-        textarea {
+        /* FULL SCREEN TEXTAREA UNTUK NARASI */
+        .fullscreen-textarea {
+            width: 100%;
+            height: calc(100vh - 140px);
+            background: #2a3f2a;
+            color: #e0e0e0;
+            padding: 20px;
+            margin: 10px 0;
+            border: 2px solid #9fd49f;
             border-radius: 20px;
-            resize: vertical;
-            min-height: 100px;
+            font-size: 18px;
+            resize: none;
+            outline: none;
+            line-height: 1.6;
+        }
+
+        .fullscreen-textarea::placeholder {
+            color: #8a9a8a;
+            font-size: 16px;
         }
 
         /* PREVIEW TEXT */
@@ -422,6 +438,37 @@
             z-index: 2000;
         }
 
+        /* LOADING OVERLAY */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            display: none;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 5px solid #2a3f2a;
+            border-top: 5px solid #9fd49f;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        .loading-text {
+            color: #9fd49f;
+            font-size: 16px;
+        }
+
         /* HIDDEN */
         .hidden {
             display: none !important;
@@ -464,6 +511,20 @@
             padding: 3px;
             font-size: 11px;
         }
+
+        /* SAVE BUTTON */
+        .save-btn {
+            width: 100%;
+            height: 50px;
+            background: #2a4a2a;
+            border: 2px solid #9fd49f;
+            color: #9fd49f;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 25px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body class="no-scroll">
@@ -492,6 +553,12 @@
     <!-- OFFLINE MODE BANNER -->
     <div id="offlineBanner" class="offline-mode hidden">
         <i class="fas fa-wifi-slash"></i> Mode Offline - Data menggunakan cache
+    </div>
+
+    <!-- LOADING OVERLAY -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loadingText">Mengirim ke Drive...</div>
     </div>
 
     <!-- MAIN MENU -->
@@ -528,9 +595,9 @@
         </div>
 
         <!-- RUNNING TEXT NARASI -->
-        <div class="running-text-container">
+        <div class="running-text-container" id="runningTextContainer" onclick="openForm('narasi')">
             <div class="running-text" id="runningText">
-                <i class="fas fa-chevron-right"></i> Belum ada narasi <i class="fas fa-chevron-left"></i>
+                <i class="fas fa-chevron-right"></i> Ketuk untuk menulis narasi <i class="fas fa-chevron-left"></i>
             </div>
         </div>
 
@@ -552,7 +619,7 @@
                 <i class="fas fa-file-alt"></i>
                 <span>NARASI</span>
             </div>
-            <div class="menu-icon" onclick="openForm('kirim')">
+            <div class="menu-icon" onclick="processSubmission()">
                 <i class="fas fa-paper-plane"></i>
                 <span>KIRIM</span>
             </div>
@@ -574,7 +641,7 @@
             <div style="width:45px;"></div>
         </div>
 
-        <select id="selectDesa" onchange="loadSelectedDesa()">
+        <select id="selectDesa" onchange="selectDesaAndClose()">
             <option value="">-- Pilih Desa --</option>
         </select>
         
@@ -586,8 +653,6 @@
         <div class="preview-text" id="previewKoordinat">
             <i class="fas fa-map-marker-alt"></i> <span id="coordDisplay">Pilih desa untuk koordinat</span>
         </div>
-        
-        <div class="action-btn" style="margin-top:20px;" onclick="closeForm('desa')">SIMPAN</div>
     </div>
 
     <!-- FULL SCREEN FORM - FOTO -->
@@ -601,13 +666,11 @@
         </div>
         
         <div style="padding:10px; text-align:center;">
-            <div class="upload-icon">
+            <div class="upload-icon" onclick="document.getElementById('gambar').click()">
                 <i class="fas fa-camera"></i>
-                <input type="file" id="gambar" accept="image/*" onchange="previewImage()">
             </div>
             <p style="margin:10px; color:#b0b0b0;">Upload foto kegiatan</p>
             <div class="preview-text" id="previewGambar"></div>
-            <div class="action-btn" style="margin-top:15px;" onclick="closeForm('foto')">SIMPAN</div>
         </div>
     </div>
 
@@ -622,13 +685,12 @@
         </div>
         
         <div style="padding:10px;">
-            <input type="datetime-local" id="tanggalWaktu" style="width:100%; margin:15px 0;" onchange="updateDateTime()">
+            <input type="datetime-local" id="tanggalWaktu" style="width:100%; margin:15px 0;" onchange="updateDateTimeAndClose()">
             <div class="preview-text" id="previewTanggal"></div>
-            <div class="action-btn" style="margin-top:15px;" onclick="closeForm('tanggal')">SIMPAN</div>
         </div>
     </div>
 
-    <!-- FULL SCREEN FORM - NARASI -->
+    <!-- FULL SCREEN FORM - NARASI (FULL SCREEN TEXTAREA) -->
     <div id="formNarasi" class="fullscreen-form">
         <div class="form-header">
             <div class="back-icon" onclick="closeForm('narasi')">
@@ -638,27 +700,13 @@
             <div style="width:45px;"></div>
         </div>
         
-        <textarea id="narasi" rows="4" placeholder="Masukkan narasi kegiatan..." style="margin:15px 0;" oninput="updateNarasi()"></textarea>
-        <div class="action-btn" onclick="closeForm('narasi')">SIMPAN</div>
+        <textarea id="narasiFull" class="fullscreen-textarea" placeholder="Tulis narasi kegiatan di sini..."><?php echo isset($_POST['message']) ? htmlspecialchars($_POST['message']) : ''; ?></textarea>
+        <button class="save-btn" onclick="saveNarasi()">SIMPAN NARASI</button>
     </div>
 
-    <!-- FULL SCREEN FORM - KIRIM -->
-    <div id="formKirim" class="fullscreen-form">
-        <div class="form-header">
-            <div class="back-icon" onclick="closeForm('kirim')">
-                <i class="fas fa-arrow-left"></i>
-            </div>
-            <div class="form-title">KIRIM</div>
-            <div style="width:45px;"></div>
-        </div>
-        
-        <div style="padding:15px; text-align:center;">
-            <div class="action-btn" style="width:180px; margin:20px auto;" onclick="processSubmission()">
-                <i class="fas fa-paper-plane"></i> KIRIM
-            </div>
-            <div class="preview-text" id="kirimStatus"></div>
-        </div>
-    </div>
+    <!-- FILE INPUT HIDDEN -->
+    <input type="file" id="gambar" accept="image/*" onchange="previewImage()" style="display:none;">
+    <input type="file" id="fileUpload" accept=".txt" style="display:none;">
 
     <!-- TOAST -->
     <div id="toastMessage" class="toast"></div>
@@ -667,6 +715,9 @@
         // ==================== GOOGLE APPS SCRIPT CONFIG ====================
         // GANTI URL INI DENGAN URL APPS SCRIPT ANDA YANG ASLI
         const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz-3Z-mRq7JLe-d4B85LY4A_rC4fDfeFmM6OelRl24FfEjeN-MW05Qk69fQyPF8w7bS/exec";
+        
+        // ROOT FOLDER ID (sesuai dengan Apps Script)
+        const ROOT_FOLDER_ID = "1T_YbloMtm-nfqO8ewhNPYwYX4XS5E1B-";
         
         // ==================== GITHUB CONFIG ====================
         const GITHUB_USERNAME = "arta1979";
@@ -815,6 +866,9 @@
                 if (selectedCoord) {
                     document.getElementById('stampCoord').textContent = selectedCoord;
                     document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> ' + selectedCoord;
+                } else {
+                    document.getElementById('stampCoord').textContent = '-';
+                    document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-exclamation-circle"></i> Gagal memuat koordinat';
                 }
             } else {
                 document.getElementById('stampCoord').textContent = '-';
@@ -822,7 +876,8 @@
             }
             
             if (selectedDate) {
-                const options = { day: '2-digit', month: '2-digit', year: 'numeric' };
+                // Format tanggal: dd mmmm yyyy
+                const options = { day: '2-digit', month: 'long', year: 'numeric' };
                 const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
                 
                 document.getElementById('stampTanggal').textContent = selectedDate.toLocaleDateString('id-ID', options);
@@ -868,19 +923,16 @@
                 const coord = selectedCoord || '-';
                 
                 if (selectedDate) {
-                    const options = { 
-                        day: '2-digit', 
-                        month: '2-digit', 
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit'
-                    };
-                    const dateStr = selectedDate.toLocaleDateString('id-ID', options).replace(/\//g, '-');
+                    // Format tanggal: dd mmmm yyyy
+                    const options = { day: '2-digit', month: 'long', year: 'numeric' };
+                    const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+                    
+                    const dateStr = selectedDate.toLocaleDateString('id-ID', options);
+                    const timeStr = selectedDate.toLocaleTimeString('id-ID', timeOptions);
                     
                     ctx.fillText(desa, canvas.width - 10, canvas.height - 80);
                     ctx.fillText(coord, canvas.width - 10, canvas.height - 55);
-                    ctx.fillText(dateStr, canvas.width - 10, canvas.height - 30);
+                    ctx.fillText(dateStr + ' ' + timeStr, canvas.width - 10, canvas.height - 30);
                 } else {
                     ctx.fillText(desa, canvas.width - 10, canvas.height - 55);
                     ctx.fillText(coord, canvas.width - 10, canvas.height - 30);
@@ -894,9 +946,32 @@
 
         // ==================== UPDATE RUNNING TEXT ====================
         function updateNarasi() {
-            narasiText = document.getElementById('narasi').value;
+            narasiText = document.getElementById('narasiFull').value;
             const runningText = document.getElementById('runningText');
-            runningText.innerHTML = `<i class="fas fa-chevron-right"></i> ${narasiText || 'Belum ada narasi'} <i class="fas fa-chevron-left"></i>`;
+            if (narasiText) {
+                runningText.innerHTML = `<i class="fas fa-chevron-right"></i> ${narasiText} <i class="fas fa-chevron-left"></i>`;
+            } else {
+                runningText.innerHTML = `<i class="fas fa-chevron-right"></i> Ketuk untuk menulis narasi <i class="fas fa-chevron-left"></i>`;
+            }
+        }
+
+        // ==================== SAVE NARASI ====================
+        function saveNarasi() {
+            updateNarasi();
+            closeForm('narasi');
+            showToast('Narasi tersimpan');
+        }
+
+        // ==================== SELECT DESA AND CLOSE ====================
+        async function selectDesaAndClose() {
+            await loadSelectedDesa();
+            closeForm('desa');
+        }
+
+        // ==================== UPDATE DATETIME AND CLOSE ====================
+        function updateDateTimeAndClose() {
+            updateDateTime();
+            closeForm('tanggal');
         }
 
         // ==================== FORM NAVIGATION ====================
@@ -906,7 +981,6 @@
             document.getElementById('formFoto').classList.remove('active');
             document.getElementById('formTanggal').classList.remove('active');
             document.getElementById('formNarasi').classList.remove('active');
-            document.getElementById('formKirim').classList.remove('active');
             
             if (formName === 'desa') {
                 document.getElementById('formDesa').classList.add('active');
@@ -915,9 +989,8 @@
             } else if (formName === 'tanggal') {
                 document.getElementById('formTanggal').classList.add('active');
             } else if (formName === 'narasi') {
+                document.getElementById('narasiFull').value = narasiText;
                 document.getElementById('formNarasi').classList.add('active');
-            } else if (formName === 'kirim') {
-                document.getElementById('formKirim').classList.add('active');
             }
         }
 
@@ -927,7 +1000,6 @@
             document.getElementById('formFoto').classList.remove('active');
             document.getElementById('formTanggal').classList.remove('active');
             document.getElementById('formNarasi').classList.remove('active');
-            document.getElementById('formKirim').classList.remove('active');
             
             updateStampInfo();
         }
@@ -938,7 +1010,6 @@
             document.getElementById('formFoto').classList.remove('active');
             document.getElementById('formTanggal').classList.remove('active');
             document.getElementById('formNarasi').classList.remove('active');
-            document.getElementById('formKirim').classList.remove('active');
         }
 
         // ==================== DESA ====================
@@ -971,7 +1042,11 @@
                 reader.onload = function(e) {
                     img = new Image();
                     img.src = e.target.result;
-                    img.onload = updateMainCanvas;
+                    img.onload = function() {
+                        updateMainCanvas();
+                        closeForm('foto');
+                        showToast('Foto berhasil diupload');
+                    };
                 };
                 reader.readAsDataURL(file);
             }
@@ -984,6 +1059,7 @@
                 selectedDate = new Date(tglInput);
                 selectedDate.setSeconds(Math.floor(Math.random() * 60));
                 
+                // Format tanggal: dd mmmm yyyy
                 const options = { 
                     day: '2-digit', 
                     month: 'long', 
@@ -994,7 +1070,8 @@
                 };
                 
                 document.getElementById('previewTanggal').innerHTML = '<i class="fas fa-calendar-check"></i> ' + 
-                    selectedDate.toLocaleDateString('id-ID', options);
+                    selectedDate.toLocaleDateString('id-ID', options) + ' ' + 
+                    selectedDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 
                 updateStampInfo();
             }
@@ -1077,34 +1154,59 @@
             }
         }
 
-        // ==================== UPLOAD TO TELEGRAM & DRIVE ====================
-        async function uploadToTelegramAndDrive(fileData, fileName, desaName) {
-            showToast('Mengirim ke server...');
+        // ==================== UPLOAD TO DRIVE ====================
+        async function uploadToDrive(fileData, fileName, desaName) {
+            showLoading(true, 'Mengirim ke Google Drive...');
             
-            const telegramResult = await callAppsScript('sendTelegram', {
+            const now = new Date();
+            const year = now.getFullYear().toString();
+            const month = now.toLocaleDateString('id-ID', { month: 'long' });
+            
+            const result = await callAppsScript('uploadDrive', {
                 fileName: fileName,
                 fileData: fileData,
-                desaName: desaName,
+                desa: desaName,
+                year: year,
+                month: month,
                 mimeType: 'application/zip'
             });
             
-            if (telegramResult.success) {
-                const now = new Date();
-                const year = now.getFullYear().toString();
-                const month = now.toLocaleDateString('id-ID', { month: 'long' });
+            showLoading(false);
+            
+            if (result && result.success) {
+                showToast('✅ File berhasil diupload ke Drive!');
+                console.log('Drive upload success:', result);
                 
-                await callAppsScript('uploadDrive', {
-                    fileName: fileName,
-                    fileData: fileData,
-                    desa: desaName,
-                    year: year,
-                    month: month,
-                    mimeType: 'application/zip'
+                // Kirim notifikasi ke Telegram
+                await callAppsScript('sendTelegramText', {
+                    message: `📁 *Laporan DUKOPS Terkirim*\n\n` +
+                             `📍 Desa: ${desaName}\n` +
+                             `📅 Tanggal: ${selectedDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}\n` +
+                             `⏰ Jam: ${selectedDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}\n` +
+                             `📂 File: ${fileName}\n\n` +
+                             `🗂️ Path: ${year}/${month}/${desaName}/`,
+                    chatId: TELEGRAM_CHAT_ID
                 });
                 
-                return { success: true };
+                return true;
+            } else {
+                showToast('❌ Gagal upload ke Drive');
+                console.error('Drive upload failed:', result);
+                return false;
             }
-            return telegramResult;
+        }
+
+        // ==================== LOADING OVERLAY ====================
+        function showLoading(show, message = 'Mengirim ke Drive...') {
+            const overlay = document.getElementById('loadingOverlay');
+            const text = document.getElementById('loadingText');
+            
+            if (show) {
+                text.textContent = message;
+                overlay.style.display = 'flex';
+            } else {
+                overlay.style.display = 'none';
+            }
         }
 
         // ==================== SUBMIT ====================
@@ -1119,18 +1221,38 @@
                 return;
             }
 
+            if (!selectedCoord) {
+                showToast('Koordinat tidak tersedia');
+                return;
+            }
+
+            if (!narasiText) {
+                showToast('Tulis narasi dulu');
+                return;
+            }
+
+            if (!isOnline) {
+                showToast('Tidak ada koneksi internet');
+                return;
+            }
+
             const canvas = document.getElementById('mainCanvas');
             const imgData = canvas.toDataURL('image/png').split(',')[1];
-            const narasi = document.getElementById('narasi').value || '-';
             const date = selectedDate;
 
             const namaFile = selectedDesa.replace(/[^a-z0-9]/gi, '_') + '_' + 
-                            date.getDate() + '_' + (date.getMonth()+1) + '_' +
-                            date.getHours() + date.getMinutes() + date.getSeconds();
+                            ('0' + date.getDate()).slice(-2) + '_' + 
+                            ('0' + (date.getMonth()+1)).slice(-2) + '_' +
+                            date.getFullYear() + '_' +
+                            ('0' + date.getHours()).slice(-2) + 
+                            ('0' + date.getMinutes()).slice(-2) + 
+                            ('0' + date.getSeconds()).slice(-2);
 
             const zip = new JSZip();
-            zip.file(namaFile + '.txt', narasi);
-            zip.file(namaFile + '.png', imgData, { base64: true });
+            zip.file('NARASI.txt', narasiText);
+            zip.file('FOTO.png', imgData, { base64: true });
+
+            showLoading(true, 'Membuat file ZIP...');
 
             zip.generateAsync({ type: 'blob' }).then(async function(content) {
                 const reader = new FileReader();
@@ -1138,28 +1260,17 @@
                 reader.onload = async function() {
                     const base64Data = reader.result.split(',')[1];
                     
-                    const result = await uploadToTelegramAndDrive(base64Data, namaFile + '.zip', selectedDesa);
+                    // Upload langsung ke Drive
+                    const success = await uploadToDrive(base64Data, namaFile + '.zip', selectedDesa);
                     
-                    if (result && result.success) {
-                        document.getElementById('kirimStatus').innerHTML = '<i class="fas fa-check-circle"></i> Terkirim!';
-                        showToast('Terkirim ke Telegram & Drive!');
-                        setTimeout(goToMainMenu, 1500);
-                    } else if (result && result.offline) {
-                        const pendingId = Date.now();
-                        pendingSubmissions.push({
-                            id: pendingId,
-                            fileName: namaFile + '.zip',
-                            fileData: base64Data,
-                            desaName: selectedDesa
-                        });
-                        localStorage.setItem('pendingSubmissions', JSON.stringify(pendingSubmissions));
-                        
-                        document.getElementById('kirimStatus').innerHTML = '<i class="fas fa-clock"></i> Disimpan (offline)';
-                        showToast('Data disimpan, akan dikirim saat online');
-                        setTimeout(goToMainMenu, 1500);
+                    if (success) {
+                        // Reset form setelah sukses
+                        setTimeout(() => {
+                            resetAllData();
+                            goToMainMenu();
+                        }, 2000);
                     } else {
-                        document.getElementById('kirimStatus').innerHTML = '<i class="fas fa-times-circle"></i> Gagal!';
-                        showToast('Gagal kirim');
+                        showLoading(false);
                     }
                 };
             });
@@ -1175,18 +1286,19 @@
                 selectedDate = new Date();
                 
                 document.getElementById('gambar').value = '';
-                document.getElementById('narasi').value = '';
+                document.getElementById('narasiFull').value = '';
                 document.getElementById('selectDesa').value = '';
                 document.getElementById('previewGambar').innerHTML = '';
                 document.getElementById('previewDesa').innerHTML = '';
                 document.getElementById('previewTanggal').innerHTML = '';
                 document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> Pilih desa';
                 
-                document.getElementById('runningText').innerHTML = '<i class="fas fa-chevron-right"></i> Belum ada narasi <i class="fas fa-chevron-left"></i>';
+                document.getElementById('runningText').innerHTML = '<i class="fas fa-chevron-right"></i> Ketuk untuk menulis narasi <i class="fas fa-chevron-left"></i>';
                 
                 const now = new Date();
                 selectedDate = now;
                 document.getElementById('tanggalWaktu').value = now.toISOString().slice(0, 16);
+                updateDateTime();
                 
                 updateStampInfo();
                 drawDefaultCanvas();
@@ -1235,6 +1347,7 @@
             const now = new Date();
             selectedDate = now;
             document.getElementById('tanggalWaktu').value = now.toISOString().slice(0, 16);
+            updateDateTime();
             
             updateStampInfo();
             drawDefaultCanvas();
@@ -1260,7 +1373,9 @@
         window.loadSelectedDesa = loadSelectedDesa;
         window.previewImage = previewImage;
         window.updateDateTime = updateDateTime;
-        window.updateNarasi = updateNarasi;
+        window.updateDateTimeAndClose = updateDateTimeAndClose;
+        window.selectDesaAndClose = selectDesaAndClose;
+        window.saveNarasi = saveNarasi;
         window.processSubmission = processSubmission;
         window.resetAllData = resetAllData;
     </script>
