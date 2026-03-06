@@ -23,7 +23,6 @@
     <link rel="manifest" href="manifest.json">
     
     <style>
-        /* RESET TOTAL */
         * {
             margin: 0;
             padding: 0;
@@ -713,7 +712,6 @@
 
     <script>
         // ==================== GOOGLE APPS SCRIPT CONFIG ====================
-        // GANTI URL INI DENGAN URL APPS SCRIPT ANDA YANG ASLI
         const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz-3Z-mRq7JLe-d4B85LY4A_rC4fDfeFmM6OelRl24FfEjeN-MW05Qk69fQyPF8w7bS/exec";
         
         // ROOT FOLDER ID (sesuai dengan Apps Script)
@@ -735,12 +733,13 @@
         const GITHUB_BRANCH = "main";
         
         // URL untuk data dari GitHub
-        const DESA_LIST_URL = `https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO}/${GITHUB_BRANCH}/data/desa-list.json`;
+        const DESA_LIST_URL = `https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO}/${GITHUB_BRANCH}/data/desa/desa-list.json`;
         const COORD_BASE_URL = `https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO}/${GITHUB_BRANCH}/data/coordinates/`;
         
         // ==================== GLOBAL VARIABLES ====================
         let img = new Image();
         let selectedDesa = "";
+        let selectedDesaFull = "";
         let selectedCoord = "";
         let selectedDate = new Date();
         let narasiText = "";
@@ -756,18 +755,15 @@
         // ==================== LOAD DAFTAR DESA DARI GITHUB ====================
         async function loadDesaList() {
             try {
-                // Coba ambil dari localStorage dulu
                 const cachedDesa = localStorage.getItem('desaList');
                 if (cachedDesa) {
                     try {
                         const parsed = JSON.parse(cachedDesa);
-                        if (Array.isArray(parsed)) {
-                            desaList = parsed;
-                        } else if (parsed && parsed.desaList) {
+                        if (parsed && parsed.desaList) {
                             desaList = parsed.desaList;
+                            console.log('Loaded desa from cache:', desaList);
+                            populateDesaDropdown();
                         }
-                        console.log('Loaded desa from cache:', desaList);
-                        populateDesaDropdown();
                     } catch (e) {
                         console.error('Error parsing cached desa:', e);
                     }
@@ -779,16 +775,14 @@
                         const data = await response.json();
                         console.log('Raw desa data from GitHub:', data);
                         
-                        if (Array.isArray(data)) {
-                            desaList = data;
-                        } else if (data && data.desaList) {
+                        if (data && data.desaList) {
                             desaList = data.desaList;
-                        }
-                        
-                        if (desaList.length > 0) {
-                            localStorage.setItem('desaList', JSON.stringify(desaList));
-                            populateDesaDropdown();
-                            console.log('Loaded desa from GitHub:', desaList);
+                            
+                            if (desaList.length > 0) {
+                                localStorage.setItem('desaList', JSON.stringify({ desaList: desaList }));
+                                populateDesaDropdown();
+                                console.log('Loaded desa from GitHub:', desaList);
+                            }
                         }
                     }
                 }
@@ -805,9 +799,13 @@
             if (desaList.length === 0) return;
             
             const sortedDesa = [...desaList].sort();
+            
             sortedDesa.forEach(desa => {
                 if (desa && desa.trim()) {
-                    selectDesa.add(new Option(desa, desa));
+                    const option = document.createElement('option');
+                    option.value = desa;
+                    option.textContent = desa;
+                    selectDesa.appendChild(option);
                 }
             });
         }
@@ -830,8 +828,12 @@
             document.getElementById('coordLoading').classList.remove('hidden');
             
             try {
-                const fileName = desa + ".json";
+                // Format nama file: "Co " + nama desa + ".json"
+                const fileName = "Co " + desa + ".json";
+                
                 const fileUrl = COORD_BASE_URL + fileName + '?t=' + Date.now();
+                console.log(`Loading coordinates from: ${fileUrl}`);
+                
                 const response = await fetch(fileUrl);
                 
                 if (response.ok) {
@@ -866,11 +868,11 @@
 
         // ==================== UPDATE STAMP INFO ====================
         async function updateStampInfo() {
-            document.getElementById('stampDesa').textContent = selectedDesa || '-';
+            document.getElementById('stampDesa').textContent = selectedDesaFull || '-';
             
-            if (selectedDesa) {
+            if (selectedDesaFull) {
                 document.getElementById('coordLoading').classList.remove('hidden');
-                selectedCoord = await getRandomCoordForDesa(selectedDesa);
+                selectedCoord = await getRandomCoordForDesa(selectedDesaFull);
                 document.getElementById('coordLoading').classList.add('hidden');
                 
                 if (selectedCoord) {
@@ -886,7 +888,6 @@
             }
             
             if (selectedDate) {
-                // Format tanggal: dd mmmm yyyy
                 const options = { day: '2-digit', month: 'long', year: 'numeric' };
                 const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
                 
@@ -929,11 +930,10 @@
                 ctx.shadowColor = 'black';
                 ctx.shadowBlur = 5;
                 
-                const desa = selectedDesa || 'Pilih Desa';
+                const desa = selectedDesaFull || 'Pilih Desa';
                 const coord = selectedCoord || '-';
                 
                 if (selectedDate) {
-                    // Format tanggal: dd mmmm yyyy
                     const options = { day: '2-digit', month: 'long', year: 'numeric' };
                     const timeOptions = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
                     
@@ -1025,12 +1025,13 @@
         // ==================== DESA ====================
         async function loadSelectedDesa() {
             const select = document.getElementById('selectDesa');
-            selectedDesa = select.value;
-            document.getElementById('previewDesa').innerHTML = '<i class="fas fa-check-circle"></i> ' + (selectedDesa || '');
+            selectedDesaFull = select.value;
             
-            if (selectedDesa) {
+            document.getElementById('previewDesa').innerHTML = '<i class="fas fa-check-circle"></i> ' + (selectedDesaFull || '');
+            
+            if (selectedDesaFull) {
                 document.getElementById('coordLoading').classList.remove('hidden');
-                selectedCoord = await getRandomCoordForDesa(selectedDesa);
+                selectedCoord = await getRandomCoordForDesa(selectedDesaFull);
                 document.getElementById('coordLoading').classList.add('hidden');
                 
                 if (selectedCoord) {
@@ -1069,7 +1070,6 @@
                 selectedDate = new Date(tglInput);
                 selectedDate.setSeconds(Math.floor(Math.random() * 60));
                 
-                // Format tanggal: dd mmmm yyyy
                 const options = { 
                     day: '2-digit', 
                     month: 'long', 
@@ -1169,11 +1169,9 @@
             showLoading(true, 'Mengirim ke Telegram...');
             
             try {
-                // Kirim file ZIP ke @BabinsaInputBot
                 const formData = new FormData();
                 formData.append('chat_id', TELEGRAM_ZIP_CHAT_ID);
                 
-                // Konversi base64 ke blob
                 const byteCharacters = atob(fileData);
                 const byteNumbers = new Array(byteCharacters.length);
                 for (let i = 0; i < byteCharacters.length; i++) {
@@ -1183,7 +1181,7 @@
                 const blob = new Blob([byteArray], { type: 'application/zip' });
                 
                 formData.append('document', blob, fileName);
-                formData.append('caption', `📁 *Laporan DUKOPS*\n📍 Desa: ${desaName}\n📅 ${selectedDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}\n⏰ ${selectedDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`);
+                formData.append('caption', `📁 *Laporan DUKOPS*\n📍 ${desaName}\n📅 ${selectedDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}\n⏰ ${selectedDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`);
 
                 const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_ZIP_TOKEN}/sendDocument`, {
                     method: 'POST',
@@ -1195,25 +1193,21 @@
                 
                 if (result.ok) {
                     showToast('✅ File ZIP terkirim ke Telegram!');
-                    console.log('Telegram send success:', result);
                     
-                    // Kirim notifikasi sukses ke bot report
                     await sendTelegramMessage(
                         TELEGRAM_REPORT_TOKEN,
                         TELEGRAM_REPORT_CHAT_ID,
-                        `✅ *File ZIP Terkirim*\n📍 Desa: ${desaName}\n📂 File: ${fileName}\n⏰ ${new Date().toLocaleTimeString('id-ID')}`
+                        `✅ *File ZIP Terkirim*\n📍 ${desaName}\n📂 File: ${fileName}\n⏰ ${new Date().toLocaleTimeString('id-ID')}`
                     );
                     
                     return true;
                 } else {
                     showToast('❌ Gagal kirim ke Telegram');
-                    console.error('Telegram send failed:', result);
                     
-                    // Kirim notifikasi gagal ke bot report
                     await sendTelegramMessage(
                         TELEGRAM_REPORT_TOKEN,
                         TELEGRAM_REPORT_CHAT_ID,
-                        `❌ *Gagal Kirim File ZIP*\n📍 Desa: ${desaName}\n📂 File: ${fileName}\n⏰ ${new Date().toLocaleTimeString('id-ID')}\nError: ${result.description}`
+                        `❌ *Gagal Kirim File ZIP*\n📍 ${desaName}\n📂 File: ${fileName}\n⏰ ${new Date().toLocaleTimeString('id-ID')}\nError: ${result.description}`
                     );
                     
                     return false;
@@ -1221,12 +1215,11 @@
             } catch (error) {
                 showLoading(false);
                 showToast('❌ Error kirim ke Telegram');
-                console.error('Telegram send error:', error);
                 
                 await sendTelegramMessage(
                     TELEGRAM_REPORT_TOKEN,
                     TELEGRAM_REPORT_CHAT_ID,
-                    `❌ *Error Kirim File ZIP*\n📍 Desa: ${desaName}\n📂 File: ${fileName}\n⏰ ${new Date().toLocaleTimeString('id-ID')}\nError: ${error.message}`
+                    `❌ *Error Kirim File ZIP*\n📍 ${desaName}\n📂 File: ${fileName}\n⏰ ${new Date().toLocaleTimeString('id-ID')}\nError: ${error.message}`
                 );
                 
                 return false;
@@ -1276,25 +1269,21 @@
             
             if (result && result.success) {
                 showToast('✅ File berhasil diupload ke Drive!');
-                console.log('Drive upload success:', result);
                 
-                // Kirim notifikasi sukses ke bot report
                 await sendTelegramMessage(
                     TELEGRAM_REPORT_TOKEN,
                     TELEGRAM_REPORT_CHAT_ID,
-                    `✅ *File ZIP Tersimpan di Drive*\n📍 Desa: ${desaName}\n📂 File: ${fileName}\n🗂️ Path: ${year}/${month}/${desaName}/\n⏰ ${new Date().toLocaleTimeString('id-ID')}`
+                    `✅ *File ZIP Tersimpan di Drive*\n📍 ${desaName}\n📂 File: ${fileName}\n🗂️ Path: ${year}/${month}/${desaName}/\n⏰ ${new Date().toLocaleTimeString('id-ID')}`
                 );
                 
                 return true;
             } else {
                 showToast('❌ Gagal upload ke Drive');
-                console.error('Drive upload failed:', result);
                 
-                // Kirim notifikasi gagal ke bot report
                 await sendTelegramMessage(
                     TELEGRAM_REPORT_TOKEN,
                     TELEGRAM_REPORT_CHAT_ID,
-                    `❌ *Gagal Upload ke Drive*\n📍 Desa: ${desaName}\n📂 File: ${fileName}\n⏰ ${new Date().toLocaleTimeString('id-ID')}\nError: ${result?.error || 'Unknown error'}`
+                    `❌ *Gagal Upload ke Drive*\n📍 ${desaName}\n📂 File: ${fileName}\n⏰ ${new Date().toLocaleTimeString('id-ID')}\nError: ${result?.error || 'Unknown error'}`
                 );
                 
                 return false;
@@ -1316,7 +1305,7 @@
 
         // ==================== SUBMIT ====================
         async function processSubmission() {
-            if (!selectedDesa) {
+            if (!selectedDesaFull) {
                 showToast('Pilih desa dulu');
                 return;
             }
@@ -1345,19 +1334,15 @@
             const imgData = canvas.toDataURL('image/png').split(',')[1];
             const date = selectedDate;
 
-            // Format tanggal: DD_MM_YYYY
             const day = ('0' + date.getDate()).slice(-2);
             const month = ('0' + (date.getMonth() + 1)).slice(-2);
             const year = date.getFullYear();
-            const hour = ('0' + date.getHours()).slice(-2);
-            const minute = ('0' + date.getMinutes()).slice(-2);
-            const second = ('0' + date.getSeconds()).slice(-2);
 
             const dateStr = `${day}_${month}_${year}`;
-            const timeStr = `${hour}_${minute}_${second}`;
 
-            // Nama file sesuai format yang diminta
-            const baseFileName = `${selectedDesa}_${dateStr}`;
+            let safeDesaName = selectedDesaFull.replace(/[^a-z0-9]/gi, '_');
+            
+            const baseFileName = `${safeDesaName}_${dateStr}`;
             const txtFileName = `${baseFileName}.txt`;
             const pngFileName = `${baseFileName}.png`;
             const zipFileName = `${baseFileName}.zip`;
@@ -1366,10 +1351,7 @@
 
             const zip = new JSZip();
             
-            // Tambahkan file TXT dengan nama sesuai format
             zip.file(txtFileName, narasiText);
-            
-            // Tambahkan file PNG dengan nama sesuai format
             zip.file(pngFileName, imgData, { base64: true });
 
             zip.generateAsync({ type: 'blob' }).then(async function(content) {
@@ -1378,14 +1360,11 @@
                 reader.onload = async function() {
                     const base64Data = reader.result.split(',')[1];
                     
-                    // 1. Kirim ke Telegram dulu (@BabinsaInputBot)
-                    const telegramSuccess = await sendFileToTelegram(base64Data, zipFileName, selectedDesa);
+                    const telegramSuccess = await sendFileToTelegram(base64Data, zipFileName, selectedDesaFull);
                     
                     if (telegramSuccess) {
-                        // 2. Upload ke Google Drive sebagai backup
-                        await uploadToDrive(base64Data, zipFileName, selectedDesa);
+                        await uploadToDrive(base64Data, zipFileName, selectedDesaFull);
                         
-                        // Reset form setelah sukses
                         setTimeout(() => {
                             resetAllData();
                             goToMainMenu();
@@ -1401,7 +1380,7 @@
         function resetAllData() {
             if (confirm('Reset semua data?')) {
                 img = new Image();
-                selectedDesa = "";
+                selectedDesaFull = "";
                 selectedCoord = "";
                 narasiText = "";
                 selectedDate = new Date();
@@ -1487,7 +1466,6 @@
             }, 200);
         });
 
-        // ==================== WINDOW EXPORTS ====================
         window.openForm = openForm;
         window.closeForm = closeForm;
         window.goToMainMenu = goToMainMenu;
