@@ -649,11 +649,9 @@
         const GITHUB_REPO = "dukops2";
         const GITHUB_BRANCH = "main";
         
-        // Base URL untuk file koordinat per desa
-        const COORD_BASE_URL = `https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO}/${GITHUB_BRANCH}/data/coordinates/`;
-        
-        // URL untuk file daftar desa
+        // URL untuk data dari GitHub
         const DESA_LIST_URL = `https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO}/${GITHUB_BRANCH}/data/desa-list.json`;
+        const COORD_BASE_URL = `https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO}/${GITHUB_BRANCH}/data/coordinates/`;
         
         // ==================== GLOBAL VARIABLES ====================
         let img = new Image();
@@ -665,7 +663,7 @@
         let appsScriptStatus = "unknown";
         let isOnline = navigator.onLine;
         
-        // Cache untuk data
+        // Cache untuk data (hanya dari GitHub, tidak ada default di HTML)
         let desaList = [];
         let coordCache = {};
         let pendingSubmissions = JSON.parse(localStorage.getItem('pendingSubmissions') || '[]');
@@ -678,7 +676,6 @@
                 if (cachedDesa) {
                     try {
                         const parsed = JSON.parse(cachedDesa);
-                        // Cek apakah format array atau object
                         if (Array.isArray(parsed)) {
                             desaList = parsed;
                         } else if (parsed && parsed.desaList) {
@@ -692,35 +689,53 @@
                 }
 
                 if (isOnline) {
-                    // Ambil dari GitHub
+                    // Coba ambil dari GitHub
                     const response = await fetch(DESA_LIST_URL + '?t=' + Date.now());
                     if (response.ok) {
                         const data = await response.json();
                         console.log('Raw desa data from GitHub:', data);
                         
-                        // Data bisa berupa array langsung atau object dengan properti desaList
                         if (Array.isArray(data)) {
                             desaList = data;
                         } else if (data && data.desaList) {
                             desaList = data.desaList;
-                        } else {
-                            console.error('Unexpected desa list format:', data);
-                            desaList = [];
                         }
                         
-                        // Simpan ke cache
-                        localStorage.setItem('desaList', JSON.stringify(desaList));
-                        populateDesaDropdown();
-                        console.log('Loaded desa from GitHub:', desaList);
+                        if (desaList.length > 0) {
+                            // Simpan ke cache
+                            localStorage.setItem('desaList', JSON.stringify(desaList));
+                            populateDesaDropdown();
+                            console.log('Loaded desa from GitHub:', desaList);
+                        } else {
+                            console.error('Desa list is empty from GitHub');
+                            // Tampilkan pesan error
+                            document.getElementById('previewDesa').innerHTML = '<i class="fas fa-exclamation-circle"></i> Gagal memuat daftar desa';
+                        }
                     } else {
-                        console.error('Failed to load desa list from GitHub');
+                        console.error('Failed to load desa list from GitHub:', response.status);
                     }
                 }
                 
+                // Jika masih kosong, tampilkan pesan
+                if (desaList.length === 0) {
+                    console.error('No desa data available');
+                    document.getElementById('previewDesa').innerHTML = '<i class="fas fa-exclamation-circle"></i> Tidak ada data desa';
+                }
+            } catch (error) {
+                console.error('Error loading desa list:', error);
+                document.getElementById('previewDesa').innerHTML = '<i class="fas fa-exclamation-circle"></i> Error memuat data';
+            }
+        }
+
         // ==================== POPULATE DROPDOWN DESA ====================
         function populateDesaDropdown() {
             const selectDesa = document.getElementById('selectDesa');
             selectDesa.innerHTML = '<option value="">-- Pilih Desa --</option>';
+            
+            if (desaList.length === 0) {
+                selectDesa.innerHTML = '<option value="">-- Tidak ada data desa --</option>';
+                return;
+            }
             
             // Sort desaList alphabetically
             const sortedDesa = [...desaList].sort();
@@ -755,8 +770,9 @@
             }
 
             if (!isOnline) {
-                // Jika offline, return data default
-                return { coordinates: [{ lat: -8.1489, lon: 115.1345 }] };
+                // Jika offline, tidak ada data default
+                console.error(`Offline and no cached data for ${desa}`);
+                return null;
             }
 
             document.getElementById('coordLoading').classList.remove('hidden');
@@ -773,47 +789,46 @@
                     const data = await response.json();
                     console.log(`Loaded coordinates for ${desa}:`, data);
                     
-                    // Simpan ke cache
-                    coordCache[desa] = data;
-                    localStorage.setItem(`coord_${desa}`, JSON.stringify(data));
-                    
-                    document.getElementById('coordLoading').classList.add('hidden');
-                    return data;
+                    // Validasi format
+                    if (data && data.coordinates && Array.isArray(data.coordinates) && data.coordinates.length > 0) {
+                        // Simpan ke cache
+                        coordCache[desa] = data;
+                        localStorage.setItem(`coord_${desa}`, JSON.stringify(data));
+                        
+                        document.getElementById('coordLoading').classList.add('hidden');
+                        return data;
+                    } else {
+                        console.error(`Invalid coordinate format for ${desa}:`, data);
+                        document.getElementById('coordLoading').classList.add('hidden');
+                        return null;
+                    }
                 } else {
                     throw new Error(`HTTP ${response.status}`);
                 }
             } catch (error) {
                 console.error('Error loading coordinates:', error);
                 document.getElementById('coordLoading').classList.add('hidden');
-                
-                // Fallback ke data default
-                const defaultData = { coordinates: [{ lat: -8.1489, lon: 115.1345 }] };
-                coordCache[desa] = defaultData;
-                return defaultData;
+                return null;
             }
         }
 
         // ==================== FUNGSI KOORDINAT OTOMATIS ====================
         async function getRandomCoordForDesa(desa) {
-            if (!desa) return "-8.1489, 115.1345";
+            if (!desa) {
+                console.error('No desa selected');
+                return null;
+            }
             
             const coordData = await loadCoordinatesForDesa(desa);
             
-            // Format: { desa: "...", coordinates: [{ lat, lon, elevation }, ...] }
             if (coordData && coordData.coordinates && coordData.coordinates.length > 0) {
                 const randomIndex = Math.floor(Math.random() * coordData.coordinates.length);
                 const point = coordData.coordinates[randomIndex];
-                // Format: "lat, lon" (lat dulu sesuai permintaan)
                 return `${point.lat}, ${point.lon}`;
             }
             
-            // Fallback ke format lama jika ada (array langsung)
-            if (Array.isArray(coordData) && coordData.length > 0) {
-                const randomIndex = Math.floor(Math.random() * coordData.length);
-                return coordData[randomIndex];
-            }
-            
-            return "-8.1489, 115.1345";
+            console.error(`No coordinates available for ${desa}`);
+            return null;
         }
 
         // ==================== UPDATE STAMP INFO ====================
@@ -821,9 +836,17 @@
             document.getElementById('stampDesa').textContent = selectedDesa || '-';
             
             if (selectedDesa) {
+                document.getElementById('coordLoading').classList.remove('hidden');
                 selectedCoord = await getRandomCoordForDesa(selectedDesa);
-                document.getElementById('stampCoord').textContent = selectedCoord;
-                document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> ' + selectedCoord;
+                document.getElementById('coordLoading').classList.add('hidden');
+                
+                if (selectedCoord) {
+                    document.getElementById('stampCoord').textContent = selectedCoord;
+                    document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> ' + selectedCoord;
+                } else {
+                    document.getElementById('stampCoord').textContent = 'Error';
+                    document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-exclamation-circle"></i> Gagal memuat koordinat';
+                }
             } else {
                 document.getElementById('stampCoord').textContent = '-';
                 document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> Pilih desa untuk koordinat';
@@ -907,7 +930,6 @@
                     );
                     
                     if (result.success) {
-                        // Hapus dari pending
                         pendingSubmissions = pendingSubmissions.filter(s => s.id !== submission.id);
                         localStorage.setItem('pendingSubmissions', JSON.stringify(pendingSubmissions));
                         showToast(`Pending submission ${submission.fileName} terkirim!`);
@@ -1020,7 +1042,6 @@
                 navigator.serviceWorker.register('sw.js').then(registration => {
                     console.log('ServiceWorker registered');
                     
-                    // Cek update
                     registration.addEventListener('updatefound', () => {
                         const newWorker = registration.installing;
                         newWorker.addEventListener('statechange', () => {
@@ -1051,7 +1072,7 @@
             // Update network status
             updateNetworkStatus();
             
-            // Load desa list dari GitHub
+            // Load desa list dari GitHub (tidak ada default)
             await loadDesaList();
             
             // Cek koneksi Apps Script
@@ -1199,8 +1220,13 @@
             if (selectedDesa) {
                 document.getElementById('coordLoading').classList.remove('hidden');
                 selectedCoord = await getRandomCoordForDesa(selectedDesa);
-                document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> ' + selectedCoord;
                 document.getElementById('coordLoading').classList.add('hidden');
+                
+                if (selectedCoord) {
+                    document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> ' + selectedCoord;
+                } else {
+                    document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-exclamation-circle"></i> Gagal memuat koordinat';
+                }
             } else {
                 document.getElementById('coordDisplay').innerHTML = '<i class="fas fa-map-marker-alt"></i> Pilih desa untuk koordinat';
             }
@@ -1291,6 +1317,11 @@
                 return;
             }
 
+            if (!selectedCoord) {
+                showToast('Koordinat tidak tersedia');
+                return;
+            }
+
             const canvas = document.getElementById('mainCanvas');
             const imgData = canvas.toDataURL('image/png').split(',')[1];
             const narasi = document.getElementById('narasi').value || '-';
@@ -1322,7 +1353,6 @@
                             goToMainMenu();
                         }, 1500);
                     } else if (result && result.offline) {
-                        // Simpan ke pending submissions
                         const pendingId = Date.now();
                         pendingSubmissions.push({
                             id: pendingId,
